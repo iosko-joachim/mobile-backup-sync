@@ -1,0 +1,58 @@
+# Xcode
+DerivedData/
+*.xcworkspace
+!*.xcworkspace/contents.xcworkspacedata
+*.xcodeproj
+!*.xcodeproj/project.pbxproj
+*.xcodeproj/project.xcworkspace
+*.xcodeproj/xcshareddata/
+*.xcodeproj/project.xcworkspace/xcshareddata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+
+# Build
+build/
+*.xcarchive
+*.ipa
+*.app
+
+# Swift Package Manager
+.swiftpm/
+Packages/
+
+# Carthage
+Carthage/Build/
+
+# CocoaPods
+Pods/
+Podfile.lock
+
+# User-specific
+*.xcuserstate
+xcuserdata/
+*.moved-aside
+
+# Logs
+*.log
+DerivedData/
+
+# Secrets
+*.pem
+*.p12
+*.key
+*.mobileprovision
+*.provisioningprofile
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Temporary files
+*.tmp
+*.swp
+*~
+
+# Testing
+coverage/
+*.gcno
+*.gcda

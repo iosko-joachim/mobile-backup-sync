@@ -1,0 +1,91 @@
+name: MobileBackupSync
+options:
+  bundleIdPrefix: de.jomative
+  deploymentTarget:
+    iOS: "16.0"
+  xcodeVersion: "16.0"
+  groupSortPosition: top
+  postGenCommand: cp .gitignore MobileBackupSync.xcodeproj/.gitignore
+
+settings:
+  base:
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    CODE_SIGN_STYLE: Automatic
+    DEVELOPMENT_TEAM: XV75SD8TB6
+    TARGETED_DEVICE_FAMILY: "1,2"
+    INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+    INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
+    INFOPLIST_KEY_UILaunchScreen_Generation: YES
+    INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+    INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+    INFOPLIST_KEY_CFBundleDisplayName: "Mobile Backup"
+    INFOPLIST_KEY_LSApplicationCategoryType: "public.app-category.utilities"
+    INFOPLIST_KEY_NSBonjourTypes: "_smb._tcp"
+    INFOPLIST_KEY_NSCameraUsageDescription: "Die App benötigt keinen Kamerazugriff."
+    INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "Die App benötigt keinen Fotozugriff."
+    INFOPLIST_KEY_NSLocalNetworkUsageDescription: "Die App benötigt Zugriff auf das lokale Netzwerk, um SMB-Server und NAS-Geräte zu erreichen."
+    INFOPLIST_KEY_NSBonjourServices: "_smb._tcp"
+    INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: false
+
+targets:
+  MobileBackupSync:
+    type: application
+    platform: iOS
+    sources:
+      - path: MobileBackupSync
+        excludes:
+          - "**/*.md"
+    settings:
+      base:
+        SWIFT_VERSION: "5.0"
+        ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES: YES
+        LD_RUNPATH_SEARCH_PATHS:
+          - "$(inherited)"
+          - "@executable_path/Frameworks"
+    dependencies:
+      - sdk: UIKit.framework
+      - sdk: Foundation.framework
+    preBuildScripts:
+      - script: |
+          if ! command -v xcodegen &> /dev/null; then
+            echo "warning: XcodeGen is not installed. Install with: brew install xcodegen"
+          fi
+        name: Check XcodeGen
+    postBuildScripts:
+      - script: |
+          echo "Build completed"
+        name: Post Build
+    scheme:
+      gatherCoverageData: false
+      testTargets:
+        - MobileBackupSyncTests
+      profile:
+        config: Debug
+      analyze:
+        config: Debug
+      archive:
+        config: Release
+
+  MobileBackupSyncTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: MobileBackupSyncTests
+    settings:
+      base:
+        BUNDLE_LOADER: "$(TEST_HOST)"
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/MobileBackupSync.app/MobileBackupSync"
+    dependencies:
+      - target: MobileBackupSync
+
+  MobileBackupSyncUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: MobileBackupSyncUITests
+    settings:
+      base:
+        TEST_TARGET_NAME: MobileBackupSync
+    dependencies:
+      - target: MobileBackupSync
