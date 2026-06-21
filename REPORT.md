@@ -10,8 +10,9 @@ SSH-, WebDAV- und Cloud-Ziele sind bewusst nicht enthalten.
 
 ## Funktionsumfang (implementiert)
 
-- **Speicherorte:** lokaler Ordner (über `UIDocumentPicker`, security-scoped) und
-  SMB/CIFS (AMSMB2). Beide als Quelle **oder** Ziel kombinierbar.
+- **Speicherorte:** lokaler Ordner (über `UIDocumentPicker`, security-scoped),
+  SMB/CIFS (AMSMB2) und FTP (plain/passiv über `Network.framework`). Beliebig als
+  Quelle **oder** Ziel kombinierbar.
 - **Vergleich:** rekursiv, Zuordnung über relativen Pfad, Kriterien Größe →
   Änderungsdatum (2 s Toleranz) → optional SHA-256-Hash.
 - **Vorschau (Dry Run):** Vergleichsergebnis vor dem Transfer; optionaler
@@ -34,7 +35,7 @@ SSH-, WebDAV- und Cloud-Ziele sind bewusst nicht enthalten.
 App        MobileBackupSyncApp → ContentView (Tabs: Backup, Jobs, Protokoll, Einstellungen)
 Models     AppState, FileItem, SyncJob, StorageConfig (SMB)
 Core       SyncEngine → CompareEngine, TransferManager
-Providers  StorageProvider (Protokoll) → LocalStorageProvider, SMBStorageProvider
+Providers  StorageProvider (Protokoll) → LocalStorageProvider, SMBStorageProvider, FTPStorageProvider
 Services   HashService, KeychainStore, SettingsStore, LogService
 Vendor     AMSMB2 (libsmb2)
 ```
@@ -49,8 +50,10 @@ Dadurch ist der `TransferManager` provider-agnostisch.
   sind **nicht** umgesetzt und daher nicht in den Einstellungen sichtbar.
 - Bidirektionaler Modus löst Konflikte nicht automatisch auf.
 - SSH/WebDAV/Cloud sind nicht implementiert (siehe README → Ausblick).
-- **FTP** ist bewusst nicht übernommen (NAS-backup unterstützt SMB **und** FTP als
-  FRITZ!Box-Fallback). Für reine SMB-NAS unkritisch; bei FTP-only-Zielen fehlt es.
+- **FTP** ist enthalten (plain, passiv), aber **FTPS/TLS noch nicht** — Zugangsdaten
+  gehen unverschlüsselt über die Leitung; im lokalen Heimnetz vertretbar, über das
+  Internet nicht. MFMT (Zeitstempel setzen) ist best effort; kann der Server es nicht
+  (z. B. FRITZ!Box), bleibt der Abgleich über die Dateigröße korrekt.
 
 ## Build
 

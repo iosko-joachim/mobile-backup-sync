@@ -132,11 +132,13 @@ enum SyncStatus: Equatable {
 enum StorageLocation: Identifiable, Equatable {
     case local(URL)
     case smb(SMBConfig)
+    case ftp(FTPConfig)
 
     var id: String {
         switch self {
         case .local(let url): return url.absoluteString
         case .smb(let config): return config.id
+        case .ftp(let config): return config.id
         }
     }
 
@@ -144,6 +146,7 @@ enum StorageLocation: Identifiable, Equatable {
         switch self {
         case .local(let url): return url.lastPathComponent
         case .smb(let config): return config.name.isEmpty ? config.host : config.name
+        case .ftp(let config): return config.name.isEmpty ? config.host : config.name
         }
     }
 }

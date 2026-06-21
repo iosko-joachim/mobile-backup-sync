@@ -39,4 +39,25 @@ final class SettingsStore {
     func deleteSMBPassword(host: String, username: String) {
         try? keychain.deletePassword(for: smbAccount(host: host, username: username))
     }
+
+    // MARK: - FTP-Passwörter
+
+    private func ftpAccount(host: String, username: String) -> String {
+        "ftp:\(host):\(username)"
+    }
+
+    /// Speichert ein FTP-Passwort im Keychain.
+    func saveFTPPassword(host: String, username: String, password: String) {
+        try? keychain.savePassword(password, for: ftpAccount(host: host, username: username))
+    }
+
+    /// Liest ein FTP-Passwort aus dem Keychain.
+    func getFTPPassword(host: String, username: String) -> String? {
+        try? keychain.getPassword(for: ftpAccount(host: host, username: username))
+    }
+
+    /// Löscht ein FTP-Passwort.
+    func deleteFTPPassword(host: String, username: String) {
+        try? keychain.deletePassword(for: ftpAccount(host: host, username: username))
+    }
 }

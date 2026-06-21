@@ -89,6 +89,8 @@ extension StorageLocation {
             return LocalStorageProvider(root: url)
         case .smb(let config):
             return SMBStorageProvider(config: config)
+        case .ftp(let config):
+            return FTPStorageProvider(config: config)
         }
     }
 }

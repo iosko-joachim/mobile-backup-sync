@@ -38,6 +38,8 @@ final class LocationStore {
             }
         case .smb(let config):
             defaults.set(Persisted.smb(config).encoded, forKey: slot.rawValue)
+        case .ftp(let config):
+            defaults.set(Persisted.ftp(config).encoded, forKey: slot.rawValue)
         }
     }
 
@@ -53,6 +55,8 @@ final class LocationStore {
             return .local(url)
         case .smb(let config):
             return .smb(config)
+        case .ftp(let config):
+            return .ftp(config)
         }
     }
 
@@ -87,6 +91,7 @@ final class LocationStore {
 private enum Persisted: Codable {
     case local(bookmark: Data)
     case smb(SMBConfig)
+    case ftp(FTPConfig)
 
     var encoded: Data { (try? JSONEncoder().encode(self)) ?? Data() }
 

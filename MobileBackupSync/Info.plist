@@ -27,7 +27,7 @@
 		<string>_smb._tcp</string>
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Die App benötigt Zugriff auf das lokale Netzwerk, um SMB-Server und NAS-Geräte zu erreichen.</string>
+	<string>Die App benötigt Zugriff auf das lokale Netzwerk, um SMB- und FTP-Server bzw. NAS-Geräte zu erreichen.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Die App benötigt keinen Kamerazugriff.</string>
 	<key>NSPhotoLibraryUsageDescription</key>

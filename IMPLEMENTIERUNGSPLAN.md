@@ -15,7 +15,8 @@
 >    für inkrementelles Backup — ohne sie gilt jede Datei beim nächsten Lauf als geändert.
 >    Als Akzeptanzkriterium im MVP ergänzt.
 > 4. **FTP** existiert im Vorgänger als verifizierter FRITZ!Box-Fallback (SMB **und** FTP).
->    Der Plan ignorierte FTP; als optionales MVP-Transportziel vermerkt.
+>    Im MVP `mobile-backup-sync` als eigener `FTPStorageProvider` (plain/passiv über
+>    `Network.framework`) **umgesetzt**; FTPS/TLS steht noch aus.
 > 5. **MD5** aus dem HashService gestrichen — für Integrität wertlos, nur SHA-256.
 > 6. **iOS-Realität:** „Geplante Backups" im Hintergrund, direkter USB-Zugriff mit
 >    Hot-Plug und SSID-Whitelist sind auf iOS stark eingeschränkt — als Best-Effort

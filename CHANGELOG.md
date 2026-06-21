@@ -6,7 +6,9 @@ Alle wesentlichen Änderungen an Mobile Backup & Sync werden in dieser Datei dok
 
 ### Hinzugefügt
 
-- Lauffähiger MVP: Einweg-Backup lokaler Ordner → SMB (und Restore)
+- Lauffähiger MVP: Einweg-Backup lokaler Ordner → SMB/FTP (und Restore)
+- FTP-Provider (plain, passiv) über `Network.framework` — rekursives Listing
+  (MLSD mit LIST-Fallback), STOR/RETR mit Fortschritt, MKD, DELE, MFMT (best effort)
 - Rekursiver Vergleich mit Zuordnung über relativen Pfad
 - Optionaler SHA-256-Hash-Vergleich
 - Dry Run (Vorschau ohne Schreibzugriff)

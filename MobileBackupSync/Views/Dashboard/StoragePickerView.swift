@@ -14,11 +14,13 @@ struct StoragePickerView: View {
     @Binding var selection: StorageLocation?
     @State private var selectedType: StorageType = .local
     @State private var smbConfig = SMBConfig()
+    @State private var ftpConfig = FTPConfig()
     @State private var localURL: URL?
 
     enum StorageType: String, CaseIterable {
         case local = "Lokal"
         case smb = "SMB"
+        case ftp = "FTP"
     }
 
     var body: some View {
@@ -36,6 +38,8 @@ struct StoragePickerView: View {
                     LocalStorageSection(url: $localURL, selection: $selection)
                 case .smb:
                     SMBConfigSection(config: $smbConfig, selection: $selection)
+                case .ftp:
+                    FTPConfigSection(config: $ftpConfig, selection: $selection)
                 }
             }
             .navigationTitle("Speicherort")
@@ -155,5 +159,89 @@ struct SMBConfigSection: View {
     private func save() {
         persistPassword()
         selection = .smb(config)
+    }
+}
+
+// MARK: - FTP Config Section
+
+struct FTPConfigSection: View {
+
+    @Binding var config: FTPConfig
+    @Binding var selection: StorageLocation?
+    @State private var password = ""
+    @State private var testingConnection = false
+    @State private var testResult: Bool?
+
+    var body: some View {
+        Section {
+            TextField("Name", text: $config.name)
+            TextField("Host (IP oder Hostname)", text: $config.host)
+                .keyboardType(.asciiCapable)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+            TextField("Port", value: $config.port, format: .number.grouping(.never))
+                .keyboardType(.numberPad)
+            TextField("Pfad (optional)", text: $config.path)
+            TextField("Benutzername", text: $config.username)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+            SecureField("Passwort", text: $password)
+
+            HStack {
+                Button(action: testConnection) {
+                    Label("Verbindung testen", systemImage: "checkmark.circle")
+                }
+                .disabled(config.host.isEmpty)
+
+                if testingConnection {
+                    ProgressView().scaleEffect(0.7)
+                }
+                if let testResult {
+                    Image(systemName: testResult ? "checkmark.circle.fill" : "xmark.circle.fill")
+                        .foregroundColor(testResult ? .green : .red)
+                }
+            }
+        } header: {
+            Text("FTP-Server")
+        } footer: {
+            Text("Plain FTP (passiv). FTPS/TLS ist noch nicht enthalten.")
+        }
+
+        Section {
+            Button(action: save) {
+                HStack { Spacer(); Text("Speichern"); Spacer() }
+            }
+            .disabled(config.host.isEmpty)
+        }
+    }
+
+    /// Speichert das Passwort vor dem Test, damit der Provider es nutzen kann.
+    private func persistPassword() {
+        if !password.isEmpty {
+            SettingsStore.shared.saveFTPPassword(
+                host: config.host,
+                username: config.username,
+                password: password
+            )
+        }
+    }
+
+    private func testConnection() {
+        persistPassword()
+        testingConnection = true
+        testResult = nil
+        Task {
+            let provider = FTPStorageProvider(config: config)
+            let success = await provider.testConnection()
+            await MainActor.run {
+                testResult = success
+                testingConnection = false
+            }
+        }
+    }
+
+    private func save() {
+        persistPassword()
+        selection = .ftp(config)
     }
 }

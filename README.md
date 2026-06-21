@@ -1,17 +1,19 @@
 # Mobile Backup & Sync
 
 Eine native iOS-App (SwiftUI) für Backup und Dateivergleich zwischen dem iPhone/iPad
-und einer SMB-Freigabe (NAS).
+und einem Netzwerkspeicher (SMB- oder FTP-NAS).
 
 ## Status
 
 **MVP – lauffähig.** Einweg-Backup von einem lokalen Ordner auf eine SMB-Freigabe
-(und zurück als Restore), mit Vorschau und Protokoll. Details siehe [REPORT.md](REPORT.md).
+oder einen FTP-Server (und zurück als Restore), mit Vorschau und Protokoll. Details
+siehe [REPORT.md](REPORT.md).
 
 ## Funktionen
 
 - Lokaler Ordner (iOS Files / `UIDocumentPicker`) als Quelle oder Ziel
 - SMB/CIFS-Freigabe als Quelle oder Ziel (AMSMB2 / libsmb2)
+- FTP-Server als Quelle oder Ziel (plain, passiv, über `Network.framework`; FTPS folgt)
 - Rekursiver Vergleich nach Größe, Datum und optional SHA-256-Hash
 - Vorschau vor dem Kopieren, optionaler Dry Run
 - Modi: Backup, Mirror (mit Löschen am Ziel), Bidirektional (Konflikt-Markierung)
@@ -31,7 +33,8 @@ und einer SMB-Freigabe (NAS).
 |  Storage Providers                                        |
 |  StorageProvider (Protokoll)                              |
 |   ├─ LocalStorageProvider (iOS Dateisystem)               |
-|   └─ SMBStorageProvider   (SMB/CIFS via AMSMB2)           |
+|   ├─ SMBStorageProvider   (SMB/CIFS via AMSMB2)           |
+|   └─ FTPStorageProvider   (FTP via Network.framework)     |
 +-----------------------------------------------------------+
 |  Services                                                 |
 |  HashService · KeychainStore · SettingsStore · LogService |
@@ -48,6 +51,7 @@ Jeder Provider kennt seine Wurzel; alle Pfade sind relativ dazu, wodurch der
 | App                 | Swift, SwiftUI         |
 | Mindest-iOS-Version | iOS 16                 |
 | SMB                 | AMSMB2 (libsmb2)       |
+| FTP                 | Network.framework      |
 | Hashing             | CryptoKit (SHA-256)    |
 | Key-Storage         | Keychain               |
 | Projektgenerierung  | XcodeGen               |

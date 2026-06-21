@@ -62,4 +62,17 @@ final class PathLogicTests: XCTestCase {
         let actual = try file.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
         XCTAssertEqual(actual?.timeIntervalSince1970 ?? 0, wanted.timeIntervalSince1970, accuracy: 1.0)
     }
+
+    // MARK: - FTP LIST-Parsing (Dateinamen mit Leerzeichen)
+
+    func testFTPListRemainderAfterFields() {
+        let line = "-rw-r--r--  1 owner group   12345 May 23 21:44 Datei mit Leerzeichen.pdf"
+        XCTAssertEqual(
+            FTPStorageProvider.remainderAfterFields(line, fields: 8),
+            "Datei mit Leerzeichen.pdf"
+        )
+
+        let dir = "drwxr-xr-x  2 owner group    4096 Jan 02 17:35 Ordner"
+        XCTAssertEqual(FTPStorageProvider.remainderAfterFields(dir, fields: 8), "Ordner")
+    }
 }

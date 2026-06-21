@@ -24,7 +24,7 @@ settings:
     INFOPLIST_KEY_NSBonjourTypes: "_smb._tcp"
     INFOPLIST_KEY_NSCameraUsageDescription: "Die App benötigt keinen Kamerazugriff."
     INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "Die App benötigt keinen Fotozugriff."
-    INFOPLIST_KEY_NSLocalNetworkUsageDescription: "Die App benötigt Zugriff auf das lokale Netzwerk, um SMB-Server und NAS-Geräte zu erreichen."
+    INFOPLIST_KEY_NSLocalNetworkUsageDescription: "Die App benötigt Zugriff auf das lokale Netzwerk, um SMB- und FTP-Server bzw. NAS-Geräte zu erreichen."
     INFOPLIST_KEY_NSBonjourServices: "_smb._tcp"
     INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: false
 
