@@ -277,6 +277,7 @@ Nach Abschluss der iOS-Entwicklung kann eine Android-Version als separate Implem
 - Bidirektionales Kopieren
 - Konflikterkennung und -auflösung
 - Ordnervergleich
+- **iPad: BeyondCompare-artige Vergleichsansicht** (Zweispalter, Datei-Detail, Stände)
 - Restore-Funktion
 - Geplante Backups *(iOS: nur Best-Effort — BGProcessingTask/Background Fetch geben
   keine garantierte Laufzeit für lange SMB-Transfers; realistisch „Trigger beim
@@ -347,12 +348,51 @@ Nach Abschluss der iOS-Entwicklung kann eine Android-Version als separate Implem
 - [ ] Graphische Aufbereitung
 - [ ] Export (PDF, CSV)
 
+#### 2.6 iPad: BeyondCompare-artige Vergleichsansicht
+
+Vision: auf dem iPad eine vollwertige, zweispaltige Vergleichsdarstellung wie
+BeyondCompare — verschiedene Stände gegeneinander zeigen, auf Dateiebene
+hineinzoomen und die unterschiedlichen Daten sichtbar machen. Das Telefon behält
+die schlanke Listenansicht (starker Platz-Kompromiss).
+
+Architektur-Vorteil: Quelle/Ziel werden bereits über den `relativePath` als
+gemeinsamen Schlüssel abgeglichen — genau die Grundlage für ein Zweispalter-Layout.
+
+- [ ] **Adaptive UI** über `horizontalSizeClass`: iPad (`regular`) → Zweispalter,
+  Telefon (`compact`) → bestehende Liste. Eine Codebasis, kein Fork.
+- [ ] **Gepaartes Vergleichsmodell**: CompareEngine je Pfad **beide** Seiten
+  ausgeben (Größe/Datum/Hash links *und* rechts) + Status + Richtung, statt nur
+  einer Seite wie heute.
+- [ ] **Zweispalter mit ausgerichteten Zeilen**: eine gemeinsame Zeilenliste rendert
+  linke Zelle · Mitte (Richtungs-/Status-Gutter) · rechte Zelle → Ausrichtung
+  garantiert ohne Scroll-Synchronisation. Fehlende Seite = Platzhalterzeile.
+- [ ] **Ordnerbaum** (`OutlineGroup`) zum Auf-/Zuklappen statt Flachliste.
+- [ ] **Farbcodierung + Richtungspfeile** (neu →, geändert ≠, nur Ziel ←, gleich =).
+- [ ] **Datei-Detail (Drill-down)**: bei Auswahl einer Datei beide Metadatensätze
+  nebeneinander (Größe, Datum, Hash) und — wo sinnvoll — inhaltlicher Vergleich:
+  Text-Diff bei Textdateien, Vorschau bei Bildern.
+- [ ] **Verschiedene Stände vergleichen**: mehrere Backup-Zeitpunkte/Snapshots
+  gegeneinander stellen (setzt Versionierung aus Phase 3.4 voraus).
+- [ ] **Optional interaktiv**: pro Datei Richtung/Aktion wählbar (→, ←, überspringen,
+  beide behalten) — die Engine muss dafür einen pro-Datei-Plan akzeptieren.
+- [ ] **Dateien bearbeiten/mergen** (höchste Ausbaustufe, wie BeyondCompares Editor):
+  - [ ] Text-Merge zeilenweise: einzelne Unterschiede von links nach rechts (oder
+        umgekehrt) übernehmen, manuell editieren, Ergebnis zurückschreiben.
+  - [ ] Schreib-Pfad: Datei laden → im Editor ändern → über den Provider
+        (Local/SMB/FTP) zurückschreiben, mit Zeitstempel-Erhaltung und
+        Konflikt-Sicherung (Original vorher sichern / nicht blind überschreiben).
+  - [ ] Grenzen ehrlich halten: sinnvoll v. a. für Text-/Konfigdateien; für Binär-/
+        Mediendateien nur Anzeige/Vorschau, kein zeilenweiser Merge.
+  - [ ] Sicherheitsnetz: Bearbeiten ist destruktiv → Bestätigung, optional Backup
+        der Originalversion vor dem Überschreiben.
+
 ### Deliverables
 
 - [ ] Bidirektionale Sync-Funktion
 - [ ] Restore-Funktion
 - [ ] Automatisierte Backups
 - [ ] USB-Speicher-Support
+- [ ] iPad-Zweispalter (BeyondCompare-artig)
 - [ ] Erweiterte Test-Suite
 
 ---
