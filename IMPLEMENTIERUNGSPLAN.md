@@ -589,11 +589,34 @@ gemeinsamen Schlüssel abgeglichen — genau die Grundlage für ein Zweispalter-
   - [ ] SFTP-Protokoll Implementierung
   - [ ] Key-Management (Import/Export)
 
-- [ ] Server-Hilfsprogramm
-  - [ ] Shell-Skript für Hash-Berechnung
-  - [ ] Auto-Deploy auf Server
-  - [ ] Kompatibilitäts-Check (sha256sum verfügbar?)
-  - [ ] Fallback auf client-seitige Berechnung
+- [ ] **Option: Server-seitige Hash-Berechnung über SSH** *(Schlüssel-Feature für
+  Hash-Vergleich über langsame Leitungen)*
+
+  Problem: Hash-Vergleich erfordert normalerweise, die **ganze Datei zu lesen** — bei
+  einem Remote heißt das **herunterladen**, was den Sinn („nur wirklich Geändertes
+  übertragen") zunichtemacht. SSH ist der **einzige** unserer Transporte, der einen
+  echten Shell-/Exec-Kanal bietet → der Hash kann **auf dem Server** berechnet werden,
+  nur der 64-stellige Digest geht über die Leitung (statt GB an Daten).
+
+  - [ ] Hash via SSH-**exec** (`sha256sum`/`shasum -a 256`/`b2sum`/busybox-Variante)
+        statt SFTP-Download; nur den Digest zurücklesen.
+  - [ ] **Tool-Erkennung** (welcher Hash-Befehl existiert? GNU vs. BSD/macOS vs.
+        Synology/QNAP/OpenWrt-busybox) + **Fallback** auf Client-seitig (Download+Hash).
+  - [ ] **Algorithmus-Einigung**: Server-Befehl muss denselben Algorithmus liefern wie
+        unsere lokale CryptoKit-Berechnung (SHA-256 als Default).
+  - [ ] **Sicherheit**: Dateinamen sicher quoten / `--` nutzen → kein Shell-Injection
+        über Dateinamen; Exec-Kanal, nicht reines SFTP.
+  - [ ] **Batching**: nicht ein Prozess pro Datei (langsam bei vielen Dateien), sondern
+        gebündelt (`find … -exec sha256sum`/`xargs`), um den Overhead zu amortisieren.
+  - [ ] Optionales Server-Helper-Skript (Auto-Deploy) als Komfort, aber **nicht
+        zwingend** — Standardtools reichen meist.
+
+  > **Reichweite ehrlich:** Das geht **nur über SSH**. SMB/FTP haben keinen
+  > Remote-Exec → dort weiter Größe+Datum bzw. Download zum Hashen. Cloud-Backends
+  > liefern Hashes oft gratis per Metadaten-API (Drive `md5Checksum`, Dropbox
+  > `content_hash`, OneDrive `quickXorHash`). Und: rclones SFTP-Backend hat dafür bereits
+  > `--sftp-sha1sum-command` / `--sftp-md5sum-command` — bei der librclone-Variante
+  > (§3.1) käme die server-seitige SSH-Hashing-Logik also weitgehend „frei" mit.
 
 - [ ] SSH-UI
   - [ ] Server-Konfiguration
@@ -1073,3 +1096,4 @@ fließen immer durch den Mover (Egress-Kosten, API-Rate-Limits, Token-Verwahrung
 | 0.5 | 2026-06-21 | - | Cloud-Umsetzungs-Entscheidung Einzel-SDKs vs. librclone-Embedding (§3.1) |
 | 0.6 | 2026-06-21 | - | rclone deckt auch SMB/FTP ab; strategische Option „rclone-Frontend" (§3.1) |
 | 0.7 | 2026-06-21 | - | Sektion „Positionierung & Abgrenzung": Wettbewerb, Moat, kuratierte Backends, Rolle librclone als Cloud-Motor |
+| 0.8 | 2026-06-21 | - | Option server-seitige Hash-Berechnung über SSH ausgearbeitet (§3.3) |
