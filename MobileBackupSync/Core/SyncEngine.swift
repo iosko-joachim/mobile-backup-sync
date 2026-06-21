@@ -191,9 +191,9 @@ class SyncEngine: ObservableObject {
     }
     
     /// Sync abbrechen
-    func cancel() {
+    func cancel() async {
         isCancelled = true
-        transferManager.cancel()
+        await transferManager.cancel()
     }
 }
 
@@ -248,7 +248,7 @@ struct SyncResult {
 }
 
 /// Sync-Fehler
-enum SyncError: Error, Equatable {
+enum SyncError: Error {
     case sourceNotFound
     case destinationNotFound
     case connectionFailed(String)

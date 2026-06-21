@@ -15,11 +15,25 @@ struct JobsView: View {
         NavigationStack {
             Group {
                 if appState.completedJobs.isEmpty {
-                    ContentUnavailableView(
-                        "Keine Jobs",
-                        systemImage: "list.bullet",
-                        description: Text("Erstelle einen neuen Backup-Job")
-                    )
+                    if #available(iOS 17.0, *) {
+                        ContentUnavailableView(
+                            "Keine Jobs",
+                            systemImage: "list.bullet",
+                            description: Text("Erstelle einen neuen Backup-Job")
+                        )
+                    } else {
+                        VStack(spacing: 16) {
+                            Image(systemName: "list.bullet")
+                                .font(.system(size: 48))
+                                .foregroundColor(.secondary)
+                            Text("Keine Jobs")
+                                .font(.headline)
+                            Text("Erstelle einen neuen Backup-Job")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
                 } else {
                     List {
                         ForEach(appState.completedJobs) { job in

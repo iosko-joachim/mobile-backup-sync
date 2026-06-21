@@ -43,6 +43,10 @@ targets:
         LD_RUNPATH_SEARCH_PATHS:
           - "$(inherited)"
           - "@executable_path/Frameworks"
+        INFOPLIST_FILE: MobileBackupSync/Info.plist
+        INFOPLIST_KEY_CFBundleDisplayName: "Mobile Backup"
+        INFOPLIST_KEY_LSApplicationCategoryType: "public.app-category.utilities"
+        INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: false
     dependencies:
       - sdk: UIKit.framework
       - sdk: Foundation.framework

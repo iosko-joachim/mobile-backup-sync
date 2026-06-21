@@ -26,6 +26,9 @@ class AppState: ObservableObject {
     /// Gesamter Fortschritt (0.0 - 1.0)
     @Published var overallProgress: Double = 0.0
     
+    /// Aktuelle Datei im Transfer
+    @Published var currentFile: String?
+    
     /// Aktueller Status
     @Published var status: SyncStatus = .idle
     
@@ -50,7 +53,7 @@ class AppState: ObservableObject {
     }
     
     /// Sync abbrechen
-    func cancelSync() {
+    func cancelSync() async {
         status = .cancelled
         currentJob = nil
     }

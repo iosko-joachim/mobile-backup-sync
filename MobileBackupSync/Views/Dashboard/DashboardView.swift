@@ -143,7 +143,9 @@ struct StatusView: View {
             
             if appState.status == .transferring {
                 Button("Abbrechen", role: .destructive) {
-                    appState.cancelSync()
+                    Task {
+                        await appState.cancelSync()
+                    }
                 }
                 .buttonStyle(.bordered)
             }

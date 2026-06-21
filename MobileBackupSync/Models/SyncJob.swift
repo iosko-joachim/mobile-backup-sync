@@ -8,7 +8,7 @@
 import Foundation
 
 /// Repräsentiert einen Sync-/Backup-Job
-struct SyncJob: Identifiable, Codable {
+struct SyncJob: Identifiable {
     let id: UUID
     let name: String
     let source: StorageLocation
@@ -37,7 +37,7 @@ struct SyncJob: Identifiable, Codable {
 }
 
 /// Sync-Modus
-enum SyncMode: Codable, CaseIterable {
+enum SyncMode: CaseIterable {
     /// Einweg-Backup (Quelle → Ziel)
     case backup
     
@@ -68,7 +68,7 @@ enum SyncMode: Codable, CaseIterable {
 }
 
 /// Sync-Optionen
-struct SyncOptions: Codable {
+struct SyncOptions {
     /// Vergleich nach Hash (langsamer, aber genauer)
     var compareByHash: Bool = false
     

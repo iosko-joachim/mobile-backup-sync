@@ -8,7 +8,7 @@
 import Foundation
 
 /// Repräsentiert eine Datei oder einen Ordner im Sync-Kontext
-struct FileItem: Identifiable, Equatable, Hashable {
+struct FileItem: Identifiable, Equatable {
     let id: UUID
     let name: String
     let path: String

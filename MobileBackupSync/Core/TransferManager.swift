@@ -75,9 +75,9 @@ actor TransferManager {
     ) async throws {
         // TODO: Implementierung
         // - Datei lesen
-        -// Datei schreiben
-        -// Fortschritt melden
-        -// Retry-Logik
+        // - Datei schreiben
+        // - Fortschritt melden
+        // - Retry-Logik
     }
     
     /// Transfer abbrechen
