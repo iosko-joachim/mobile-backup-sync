@@ -70,6 +70,8 @@ Das Xcode-Projekt wird generiert und ist nicht eingecheckt (siehe `.gitignore`).
 
 ## Ausblick (nicht im MVP)
 
+- **FTPS (FTP über TLS)** — verschlüsselte Variante des vorhandenen FTP-Providers
+  (explizit `AUTH TLS`); nötig für FTP über unsichere Netze
 - Weitere Ziele: SSH/SFTP, WebDAV (Nextcloud), Cloud-Anbieter
 - Geplante/Hintergrund-Ausführung, „nur im WLAN / beim Laden"
 - Optionale Verschlüsselung, parallele Transfers

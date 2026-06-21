@@ -433,7 +433,17 @@ Nach Abschluss der iOS-Entwicklung kann eine Android-Version als separate Implem
   - [ ] CloudKit Integration
   - [ ] Files App Integration
 
-#### 3.2 SSH/SFTP Provider
+#### 3.2 FTPS (FTP über TLS)
+
+- [ ] `FTPStorageProvider` um TLS erweitern (Basis-FTP ist im MVP bereits umgesetzt)
+  - [ ] Explizites `AUTH TLS` auf dem Steuerkanal
+  - [ ] TLS auch auf dem Datenkanal (`PROT P`)
+  - [ ] Zertifikatsprüfung / Umgang mit selbstsignierten Server-Zertifikaten
+  - [ ] UI-Schalter „FTP über TLS (FTPS)" in der FTP-Sektion
+  - Begründung: Plain FTP überträgt Zugangsdaten unverschlüsselt; FTPS ist die
+    Voraussetzung für FTP über unsichere Netze.
+
+#### 3.3 SSH/SFTP Provider
 
 - [ ] `SSHStorageProvider`
   - [ ] SSH-Verbindungsaufbau
@@ -453,7 +463,7 @@ Nach Abschluss der iOS-Entwicklung kann eine Android-Version als separate Implem
   - [ ] Verbindungstest
   - [ ] Terminal-Log (Debug)
 
-#### 3.3 Versionierung
+#### 3.4 Versionierung
 
 - [ ] Versions-Tracking
   - [ ] Metadaten-Speicherung pro Backup
@@ -464,7 +474,7 @@ Nach Abschluss der iOS-Entwicklung kann eine Android-Version als separate Implem
   - [ ] Einzelne Version wiederherstellen
   - [ ] Kompletten Stand wiederherstellen
 
-#### 3.4 Verschlüsselung
+#### 3.5 Verschlüsselung
 
 - [ ] `EncryptionService`
   - [ ] AES-256 Verschlüsselung
@@ -477,7 +487,7 @@ Nach Abschluss der iOS-Entwicklung kann eine Android-Version als separate Implem
   - [ ] Metadaten-Verschlüsselung
   - [ ] Secure Key-Export
 
-#### 3.5 Performance-Optimierung
+#### 3.6 Performance-Optimierung
 
 - [ ] Inkrementelle Backups
   - [ ] Change-Tracking
