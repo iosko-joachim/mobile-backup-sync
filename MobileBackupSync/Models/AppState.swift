@@ -53,7 +53,7 @@ class AppState: ObservableObject {
     }
     
     /// Sync abbrechen
-    func cancelSync() async {
+    func cancelSync() {
         status = .cancelled
         currentJob = nil
     }

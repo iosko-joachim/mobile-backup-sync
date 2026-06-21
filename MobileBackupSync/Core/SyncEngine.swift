@@ -191,9 +191,9 @@ class SyncEngine: ObservableObject {
     }
     
     /// Sync abbrechen
-    func cancel() async {
+    func cancel() {
         isCancelled = true
-        await transferManager.cancel()
+        transferManager.cancel()
     }
 }
 
