@@ -94,6 +94,59 @@ Nach Abschluss der iOS-Entwicklung kann eine Android-Version als separate Implem
 
 ---
 
+## Positionierung & Abgrenzung
+
+### Wettbewerb (iOS-rclone-Frontends)
+
+- **Rclone UI** (`rclone-ui/rclone-ui`, OSS, ~2 $, iOS/macOS): **Generalist** —
+  Fernsteuerung/Schaltzentrale für vorhandene rclone-Remotes (Copy/Sync/Bisync als
+  Kommandos, Job-Monitor). Breit, aber pro Use-Case flach; setzt rclone-Vorwissen voraus.
+- **ccViewer / CryptCloudViewer** (`lithium0003/ccViewer`, OSS): **veraltet**,
+  Viewer-/crypt-zentriert (auch SMB), kein Backup-/Vergleichs-Workflow.
+- Niemand bietet eine **BeyondCompare-artige** Vergleichs-/Merge-Ansicht.
+
+### Unsere Abgrenzung (das Moat)
+
+1. **Fokussierter Anwendungsfall** (Mobilgerät ↔ Heim-NAS sichern & vergleichen) mit
+   geführtem Ablauf — kein generischer Remote-Manager.
+2. **BeyondCompare-artige Vergleichs-/Merge-UX** (§2.6) — das zentrale, unbesetzte
+   Differenzierungsmerkmal.
+3. **Native, adaptive iOS/iPad-UX** (Zweispalter, Files-Integration).
+4. **Verifizierter LAN/Heim-NAS-Pfad** (SMB/FTP gegen FRITZ!Box, libsmb2-Signing) —
+   getestet, nicht „eins von 70 ungetesteten Backends".
+5. **Engine-Symmetrie als System**: in-App (Vordergrund) + Steuerung eines `rcd`
+   auf dem NAS (headless) aus einer App.
+6. **CH/Privacy-Default**: self-host, Daten bleiben zuhause.
+
+> **Ehrlich:** Rclone UI ist bereits da, billig, plattformübergreifend; ccViewer deckt
+> SMB+Cloud schon ab. Unsere Wette liegt auf **UX-Tiefe (Vergleich/Merge) + Fokus +
+> verifizierte Qualität**, nicht auf Backend-Breite — Breite gewinnt rclone immer.
+
+### Backend-Strategie: kuratieren statt 70 Häkchen
+
+70 Backends kann niemand testen oder supporten → für ein Produkt eine QA-/Support-
+Haftung. Daher:
+
+- **Offiziell unterstützt & gegen echte Geräte getestet** (Kern): Local, SMB, FTP,
+  WebDAV/Nextcloud, iCloud Drive, ggf. Dropbox/Drive.
+- **Der Rest: „experimentell via rclone"** — funktioniert, aber ohne Support-Versprechen.
+- Macht aus der Testlast ein **Qualitätsversprechen**: „Was wir listen, testen wir real."
+
+### Rolle von librclone (nicht ignorieren!)
+
+**librclone ist nicht der Konkurrent, sondern unser Motor für die Cloud-Erweiterung.**
+Klare Arbeitsteilung:
+
+- **Kern-Transporte = eigene, verifizierte Provider** (Local, SMB via libsmb2/Signing,
+  FTP) — der getestete Heim-NAS-Pfad bleibt unter unserer Kontrolle.
+- **Cloud-Backends = via librclone** als `RcloneProvider` (Google Drive, OneDrive,
+  Dropbox, S3, …) — so nehmen wir weitere Cloud-Speicher auf, ohne jeden Anbieter-SDK
+  selbst zu bauen/pflegen.
+- So kombinieren wir **unsere Stärke** (verifizierter LAN-/Backup-Pfad + UX) mit
+  **rclones Stärke** (Backend-Breite). Details/Trade-offs siehe §3.1.
+
+---
+
 ## Phase 0: Vorbereitung und Analyse
 
 **Dauer:** 1-2 Wochen
@@ -1019,3 +1072,4 @@ fließen immer durch den Mover (Egress-Kosten, API-Rate-Limits, Token-Verwahrung
 | 0.4 | 2026-06-21 | - | Gegencheck-Korrekturen, FTP/FTPS, iPad-Zweispalter (§2.6), Konzept Headless Protokoll-Konverter |
 | 0.5 | 2026-06-21 | - | Cloud-Umsetzungs-Entscheidung Einzel-SDKs vs. librclone-Embedding (§3.1) |
 | 0.6 | 2026-06-21 | - | rclone deckt auch SMB/FTP ab; strategische Option „rclone-Frontend" (§3.1) |
+| 0.7 | 2026-06-21 | - | Sektion „Positionierung & Abgrenzung": Wettbewerb, Moat, kuratierte Backends, Rolle librclone als Cloud-Motor |
