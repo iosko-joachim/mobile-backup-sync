@@ -28,6 +28,10 @@ settings:
     INFOPLIST_KEY_NSBonjourServices: "_smb._tcp"
     INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: false
 
+packages:
+  AMSMB2:
+    path: Vendor/AMSMB2
+
 targets:
   MobileBackupSync:
     type: application
@@ -36,6 +40,13 @@ targets:
       - path: MobileBackupSync
         excludes:
           - "**/*.md"
+    dependencies:
+      - package: AMSMB2
+        product: AMSMB2
+        embed: true
+        codeSign: true
+      - sdk: UIKit.framework
+      - sdk: Foundation.framework
     settings:
       base:
         SWIFT_VERSION: "5.0"
@@ -47,9 +58,6 @@ targets:
         INFOPLIST_KEY_CFBundleDisplayName: "Mobile Backup"
         INFOPLIST_KEY_LSApplicationCategoryType: "public.app-category.utilities"
         INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: false
-    dependencies:
-      - sdk: UIKit.framework
-      - sdk: Foundation.framework
     preBuildScripts:
       - script: |
           if ! command -v xcodegen &> /dev/null; then
