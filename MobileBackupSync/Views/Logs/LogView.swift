@@ -10,11 +10,23 @@ import SwiftUI
 struct LogView: View {
     @State private var logEntries: [LogEntry] = []
     @State private var selectedLevel: LogLevel = .all
-    
+
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                // Filter
+            Group {
+                if filteredEntries.isEmpty {
+                    Text("Keine Protokolleinträge")
+                        .foregroundColor(.secondary)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    List {
+                        ForEach(filteredEntries) { entry in
+                            LogEntryRow(entry: entry)
+                        }
+                    }
+                }
+            }
+            .safeAreaInset(edge: .top) {
                 Picker("Level", selection: $selectedLevel) {
                     Text("Alle").tag(LogLevel.all)
                     Text("Fehler").tag(LogLevel.error)
@@ -23,73 +35,44 @@ struct LogView: View {
                 }
                 .pickerStyle(.segmented)
                 .padding()
-                
-                // Log-Einträge
-                List {
-                    ForEach(filteredEntries) { entry in
-                        LogEntryRow(entry: entry)
-                    }
-                }
+                .background(.bar)
             }
             .navigationTitle("Protokoll")
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Menu {
-                        Button("Exportieren") {
-                            // TODO: Log exportieren
+                        if let url = LogService.shared.export() {
+                            ShareLink(item: url) {
+                                Label("Exportieren", systemImage: "square.and.arrow.up")
+                            }
                         }
-                        Button("Löschen", role: .destructive) {
-                            logEntries.removeAll()
+                        Button("Aktualisieren", systemImage: "arrow.clockwise") {
+                            loadLogs()
+                        }
+                        Button("Löschen", systemImage: "trash", role: .destructive) {
+                            LogService.shared.clear()
+                            loadLogs()
                         }
                     } label: {
-                        Image(systemName: "square.and.arrow.up")
+                        Image(systemName: "ellipsis.circle")
                     }
                 }
             }
         }
-        .onAppear {
-            loadLogs()
-        }
+        .onAppear(perform: loadLogs)
     }
-    
+
     private var filteredEntries: [LogEntry] {
         if selectedLevel == .all {
             return logEntries
         }
         return logEntries.filter { $0.level == selectedLevel }
     }
-    
+
     private func loadLogs() {
-        // TODO: Logs aus LogService laden
-        logEntries = [
-            LogEntry(level: .info, message: "App gestartet", timestamp: Date()),
-            LogEntry(level: .info, message: "Backup job erstellt", timestamp: Date().addingTimeInterval(-60)),
-        ]
+        // Neueste Einträge zuerst.
+        logEntries = LogService.shared.getEntries().reversed()
     }
-}
-
-/// Log-Eintrag
-struct LogEntry: Identifiable {
-    let id = UUID()
-    let level: LogLevel
-    let message: String
-    let timestamp: Date
-    
-    var formattedDate: String {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .medium
-        return formatter.string(from: timestamp)
-    }
-}
-
-/// Log-Level
-enum LogLevel: String, CaseIterable {
-    case all = "Alle"
-    case error = "Fehler"
-    case warning = "Warnung"
-    case info = "Info"
-    case debug = "Debug"
 }
 
 /// Log-Eintrag Zeile

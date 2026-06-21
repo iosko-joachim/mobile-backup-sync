@@ -8,257 +8,227 @@
 import Foundation
 import AMSMB2
 
-/// Provider für SMB/CIFS Netzwerkfreigaben
-/// Basierend auf AMSMB2 (libsmb2) - adaptiert vom NAS-backup Projekt
-class SMBStorageProvider: StorageProvider {
-    
+/// Provider für SMB/CIFS-Netzwerkfreigaben.
+/// Basiert auf AMSMB2 (libsmb2). Alle Pfade sind relativ zu `config.path`
+/// innerhalb der verbundenen Freigabe.
+final class SMBStorageProvider: StorageProvider {
+
     private let config: SMBConfig
-    private var isConnected = false
+    private let rootPath: String
     private var manager: SMB2Manager?
-    
+
     init(config: SMBConfig) {
         self.config = config
+        self.rootPath = Self.normalize(config.path)
     }
-    
-    deinit {
-        Task { @MainActor in
-            await disconnect()
-        }
-    }
-    
-    /// SMB Verbindung herstellen
+
+    // MARK: - Verbindung
+
     func connect() async throws {
-        guard !isConnected else { return }
-        
+        guard manager == nil else { return }
+
         guard let url = URL(string: "smb://\(config.host)") else {
             throw StorageProviderError.networkError("Ungültige Server-Adresse")
         }
-        
+
         let user = config.username.isEmpty ? "guest" : config.username
-        let credential = URLCredential(user: user, password: "", persistence: .forSession)
-        
+        // Passwort aus dem Keychain laden (leer für Gast-Zugang).
+        let password = config.username.isEmpty
+            ? ""
+            : (SettingsStore.shared.getSMBPassword(host: config.host, username: config.username) ?? "")
+        let credential = URLCredential(user: user, password: password, persistence: .forSession)
+
         guard let mgr = SMB2Manager(url: url, credential: credential) else {
             throw StorageProviderError.networkError("SMB-Client konnte nicht initialisiert werden")
         }
-        
-        // Signing erzwingen für FRITZ!Box Kompatibilität
+
+        // Signing erzwingen für FRITZ!Box-Kompatibilität.
         mgr.forceSMBSigning = true
         mgr.verboseWireLog = false
-        
+
         do {
             try await mgr.connectShare(name: config.share, encrypted: false)
             self.manager = mgr
-            self.isConnected = true
         } catch {
-            throw StorageProviderError.networkError("SMB Connect fehlgeschlagen: \(error.localizedDescription)")
+            throw StorageProviderError.networkError("Verbindung fehlgeschlagen: \(error.localizedDescription)")
         }
     }
-    
-    /// Verbindung trennen
+
     func disconnect() async {
         try? await manager?.disconnectShare(gracefully: true)
         manager = nil
-        isConnected = false
     }
-    
-    /// Dateien in einem Verzeichnis auflisten
-    func listContents(at path: String) async throws -> [FileItem] {
-        guard let manager, isConnected else {
-            throw StorageProviderError.notConnected
-        }
-        
-        let normalizedPath = Self.normalize(path)
-        
+
+    // MARK: - Auflisten
+
+    func listFiles() async throws -> [FileItem] {
+        let manager = try requireManager()
         do {
-            let entries = try await manager.contentsOfDirectory(atPath: normalizedPath, recursive: false)
-            
-            return entries.compactMap { e -> FileItem? in
-                guard let name = e[.nameKey] as? String,
-                      name != ".", name != ".." else { return nil }
-                
-                let isDir = (e[.fileResourceTypeKey] as? URLFileResourceType) == .directory
-                    || (e[.isDirectoryKey] as? Bool) == true
-                
-                let size = (e[.fileSizeKey] as? NSNumber)?.int64Value ?? 0
-                let modifiedDate = e[.contentModificationDateKey] as? Date ?? Date()
-                
-                let fullPath = normalizedPath.isEmpty ? name : "\(normalizedPath)/\(name)"
-                
+            let entries = try await manager.contentsOfDirectory(atPath: rootPath, recursive: true)
+            return entries.compactMap { entry -> FileItem? in
+                let isDir = (entry[.fileResourceTypeKey] as? URLFileResourceType) == .directory
+                    || (entry[.isDirectoryKey] as? Bool) == true
+                if isDir { return nil } // nur Dateien
+
+                guard let fullPath = entry[.pathKey] as? String else { return nil }
+                let normalizedFull = Self.normalize(fullPath)
+                let name = (entry[.nameKey] as? String) ?? (normalizedFull as NSString).lastPathComponent
+
+                let size = (entry[.fileSizeKey] as? NSNumber)?.int64Value ?? 0
+                let modified = entry[.contentModificationDateKey] as? Date ?? Date()
+
                 return FileItem(
                     name: name,
-                    path: fullPath,
-                    isDirectory: isDir,
+                    path: normalizedFull,
+                    relativePath: Self.relative(normalizedFull, to: rootPath),
+                    isDirectory: false,
                     size: size,
-                    modifiedDate: modifiedDate
+                    modifiedDate: modified
                 )
             }
         } catch {
-            throw StorageProviderError.networkError("Listing fehlgeschlagen: \(error.localizedDescription)")
+            throw StorageProviderError.networkError("Auflisten fehlgeschlagen: \(error.localizedDescription)")
         }
     }
-    
-    /// Remote Datei als Data lesen
-    func readFile(at path: String) async throws -> Data {
-        guard let manager, isConnected else {
-            throw StorageProviderError.notConnected
-        }
-        
-        let normalizedPath = Self.normalize(path)
-        let tempDir = FileManager.default.temporaryDirectory
-        let localURL = tempDir.appendingPathComponent(UUID().uuidString)
-        
+
+    // MARK: - Lesen / Schreiben
+
+    func readData(at relativePath: String) async throws -> Data {
+        let manager = try requireManager()
+        let temp = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: temp) }
         do {
-            try await manager.downloadItem(atPath: normalizedPath, to: localURL, progress: nil)
-            let data = try Data(contentsOf: localURL)
-            try? FileManager.default.removeItem(at: localURL)
-            return data
+            try await manager.downloadItem(atPath: fullPath(for: relativePath), to: temp, progress: nil)
+            return try Data(contentsOf: temp)
         } catch {
             throw StorageProviderError.networkError("Download fehlgeschlagen: \(error.localizedDescription)")
         }
     }
-    
-    /// Datei auf SMB Server schreiben
-    func writeFile(data: Data, to path: String, progress: @Sendable @escaping (Double) -> Void) async throws {
-        guard let manager, isConnected else {
-            throw StorageProviderError.notConnected
-        }
-        
-        let normalizedPath = Self.normalize(path)
-        let tempDir = FileManager.default.temporaryDirectory
-        let localURL = tempDir.appendingPathComponent(UUID().uuidString)
-        
-        // Daten temporär schreiben
-        try data.write(to: localURL)
-        defer { try? FileManager.default.removeItem(at: localURL) }
-        
+
+    func upload(from localURL: URL, to relativePath: String,
+                progress: @escaping (Double) -> Void) async throws {
+        let manager = try requireManager()
+        let remote = fullPath(for: relativePath)
+        try await ensureParentDirectory(of: remote, manager: manager)
+
+        let totalBytes = Int64(localURL.fileSizeOrZero)
         do {
-            try await manager.uploadItem(at: localURL, toPath: normalizedPath) { bytesWritten in
-                // AMSMB2 liefert nur bytesWritten, nicht totalBytes
-                // Wir müssen den Fortschritt selbst berechnen
-                let totalBytes = Int64(data.count)
-                let p = totalBytes > 0 ? Double(bytesWritten) / Double(totalBytes) : 0
-                progress(p)
-                return true // Continue
+            try await manager.uploadItem(at: localURL, toPath: remote) { written in
+                if totalBytes > 0 { progress(min(1.0, Double(written) / Double(totalBytes))) }
+                return true
             }
+            progress(1.0)
         } catch {
             throw StorageProviderError.networkError("Upload fehlgeschlagen: \(error.localizedDescription)")
         }
     }
-    
-    /// Remote Datei löschen
-    func deleteFile(at path: String) async throws {
-        guard let manager, isConnected else {
-            throw StorageProviderError.notConnected
-        }
-        
-        let normalizedPath = Self.normalize(path)
-        
-        // AMSMB2 hat keine direkte deleteItem Methode
-        // Wir müssen die Datei über einen leeren Upload überschreiben oder einen anderen Weg finden
-        // Für jetzt als "unsupported" markieren
-        throw StorageProviderError.unsupported("Löschen von Dateien wird aktuell nicht unterstützt")
-    }
-    
-    /// Remote Ordner erstellen
-    func createDirectory(at path: String) async throws {
-        guard let manager, isConnected else {
-            throw StorageProviderError.notConnected
-        }
-        
-        let normalizedPath = Self.normalize(path)
-        
+
+    func download(at relativePath: String, to localURL: URL,
+                  progress: @escaping (Double) -> Void) async throws {
+        let manager = try requireManager()
+        let fm = FileManager.default
+        if fm.fileExists(atPath: localURL.path) { try fm.removeItem(at: localURL) }
         do {
-            try await manager.createDirectory(atPath: normalizedPath)
+            try await manager.downloadItem(atPath: fullPath(for: relativePath), to: localURL) { read, total in
+                if total > 0 { progress(min(1.0, Double(read) / Double(total))) }
+                return true
+            }
+            progress(1.0)
         } catch {
-            throw StorageProviderError.networkError("Verzeichnis erstellen fehlgeschlagen: \(error.localizedDescription)")
+            throw StorageProviderError.networkError("Download fehlgeschlagen: \(error.localizedDescription)")
         }
     }
-    
-    /// Metadaten für Remote Datei lesen
-    func getMetadata(for path: String) async throws -> FileItem {
-        guard let manager, isConnected else {
-            throw StorageProviderError.notConnected
-        }
-        
-        let normalizedPath = Self.normalize(path)
-        
-        // Hole Parent-Verzeichnis und suche die Datei darin
-        let parentPath: String
-        let fileName: String
-        
-        if let lastSlash = normalizedPath.lastIndex(of: "/") {
-            parentPath = String(normalizedPath[..<lastSlash])
-            fileName = String(normalizedPath[normalizedPath.index(after: lastSlash)...])
-        } else {
-            parentPath = ""
-            fileName = normalizedPath
-        }
-        
-        let entries: [[URLResourceKey: Any]]
+
+    func delete(at relativePath: String) async throws {
+        let manager = try requireManager()
         do {
-            entries = try await manager.contentsOfDirectory(atPath: parentPath.isEmpty ? "/" : parentPath, recursive: false)
+            try await manager.removeItem(atPath: fullPath(for: relativePath))
         } catch {
-            throw StorageProviderError.notFound(path)
+            throw StorageProviderError.networkError("Löschen fehlgeschlagen: \(error.localizedDescription)")
         }
-        
-        guard let entry = entries.first(where: { ($0[.nameKey] as? String) == fileName }) else {
-            throw StorageProviderError.notFound(path)
-        }
-        
-        let isDir = (entry[.fileResourceTypeKey] as? URLFileResourceType) == .directory
-        let size = (entry[.fileSizeKey] as? NSNumber)?.int64Value ?? 0
-        let modifiedDate = entry[.contentModificationDateKey] as? Date ?? Date()
-        
-        return FileItem(
-            name: fileName,
-            path: path,
-            isDirectory: isDir,
-            size: size,
-            modifiedDate: modifiedDate
+    }
+
+    func setModificationDate(_ date: Date, at relativePath: String) async {
+        guard let manager else { return }
+        // SetInfo am Ziel; Fehler hier sind nicht fatal (Abgleich kopiert dann
+        // ggf. erneut), daher nur best effort.
+        try? await manager.setAttributes(
+            attributes: [.contentModificationDateKey: date],
+            ofItemAtPath: fullPath(for: relativePath)
         )
     }
-    
-    /// Hash berechnen (client-seitig, da SMB kein server-seitiges Hashing unterstützt)
-    func calculateHash(for path: String) async throws -> String {
-        let data = try await readFile(at: path)
-        return data.sha256
-    }
-    
-    /// Freier Speicherplatz auf SMB Server
+
     func getFreeSpace() async throws -> Int64 {
-        guard let manager, isConnected else {
-            throw StorageProviderError.notConnected
+        let manager = try requireManager()
+        guard let attrs = try? await manager.attributesOfFileSystem(forPath: rootPath.isEmpty ? "/" : rootPath),
+              let free = (attrs[.systemFreeSize] as? NSNumber)?.int64Value else {
+            return Int64.max
         }
-        
-        // AMSMB2 bietet keine direkte Methode für freien Speicherplatz
-        // Rückgabe von max als Placeholder
-        return Int64.max
+        return free
     }
-    
-    /// SMB Verbindung testen
+
     func testConnection() async -> Bool {
         do {
             try await connect()
-            _ = try await listContents(at: "/")
+            _ = try await contentsAtRoot()
             await disconnect()
             return true
         } catch {
             return false
         }
     }
-    
-    /// SMB Session neu verbinden (für Retry-Logik)
-    func reconnect() async throws {
-        await disconnect()
-        try await connect()
+
+    // MARK: - Helfer
+
+    private func requireManager() throws -> SMB2Manager {
+        guard let manager else { throw StorageProviderError.notConnected }
+        return manager
     }
-    
-    /// Normalisiert Pfade für SMB
+
+    private func contentsAtRoot() async throws -> [[URLResourceKey: Any]] {
+        let manager = try requireManager()
+        return try await manager.contentsOfDirectory(atPath: rootPath, recursive: false)
+    }
+
+    /// Vollständiger SMB-Pfad aus Wurzel + relativem Pfad.
+    private func fullPath(for relativePath: String) -> String {
+        let rel = Self.normalize(relativePath)
+        if rootPath.isEmpty { return rel }
+        return rel.isEmpty ? rootPath : "\(rootPath)/\(rel)"
+    }
+
+    /// Legt fehlende Elternverzeichnisse eines Remote-Pfads an.
+    private func ensureParentDirectory(of remotePath: String, manager: SMB2Manager) async throws {
+        let parts = remotePath.split(separator: "/").dropLast()
+        guard !parts.isEmpty else { return }
+        var current = ""
+        for part in parts {
+            current = current.isEmpty ? String(part) : "\(current)/\(part)"
+            // Existiert das Verzeichnis bereits, ignorieren wir den Fehler.
+            try? await manager.createDirectory(atPath: current)
+        }
+    }
+
+    /// Normalisiert Pfade für SMB (Backslashes, doppelte/umschließende Slashes).
     static func normalize(_ path: String) -> String {
         var p = path.replacingOccurrences(of: "\\", with: "/")
         while p.contains("//") { p = p.replacingOccurrences(of: "//", with: "/") }
         while p.hasPrefix("/") { p.removeFirst() }
         while p.hasSuffix("/") { p.removeLast() }
         return p
+    }
+
+    /// `fullPath` relativ zu `base` (beide bereits normalisiert).
+    static func relative(_ fullPath: String, to base: String) -> String {
+        guard !base.isEmpty else { return fullPath }
+        if fullPath == base { return "" }
+        let prefix = base + "/"
+        return fullPath.hasPrefix(prefix) ? String(fullPath.dropFirst(prefix.count)) : fullPath
+    }
+}
+
+private extension URL {
+    var fileSizeOrZero: Int {
+        (try? resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
     }
 }

@@ -9,9 +9,12 @@ import SwiftUI
 
 struct PreviewView: View {
     @Environment(\.dismiss) var dismiss
+    @EnvironmentObject var appState: AppState
+    @AppStorage("compareByHash") private var compareByHash = false
     @State private var compareResult: CompareResult?
     @State private var isComparing = true
-    
+    @State private var errorMessage: String?
+
     var body: some View {
         NavigationStack {
             Group {
@@ -21,8 +24,15 @@ struct PreviewView: View {
                 } else if let result = compareResult {
                     CompareResultView(result: result)
                 } else {
-                    Text("Fehler beim Vergleich")
-                        .foregroundColor(.red)
+                    VStack(spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle")
+                            .font(.largeTitle)
+                            .foregroundColor(.orange)
+                        Text(errorMessage ?? "Vergleich fehlgeschlagen")
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    .padding()
                 }
             }
             .navigationTitle("Vorschau")
@@ -38,11 +48,29 @@ struct PreviewView: View {
             }
         }
     }
-    
+
     private func performCompare() async {
-        // TODO: CompareEngine aufrufen
-        try? await Task.sleep(nanoseconds: 1_000_000_000)
-        compareResult = CompareResult()
+        guard let source = appState.selectedSource,
+              let destination = appState.selectedDestination else {
+            errorMessage = "Quelle oder Ziel nicht ausgewählt."
+            isComparing = false
+            return
+        }
+
+        var options = SyncOptions()
+        options.compareByHash = compareByHash
+
+        do {
+            compareResult = try await CompareEngine().compare(
+                source: source,
+                destination: destination,
+                options: options
+            )
+        } catch {
+            errorMessage = (error as? SyncError)?.localizedDescription
+                ?? (error as? StorageProviderError)?.localizedDescription
+                ?? error.localizedDescription
+        }
         isComparing = false
     }
 }

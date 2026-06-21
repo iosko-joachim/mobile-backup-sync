@@ -7,167 +7,130 @@
 
 import Foundation
 
-/// Provider für lokalen Dateisystem-Zugriff (iOS Files App)
-class LocalStorageProvider: StorageProvider {
-    
-    private var isConnected = true
-    
-    /// Verbindung herstellen (lokal immer verbunden)
+/// Provider für lokalen Dateisystem-Zugriff (iOS Files App).
+///
+/// Die Wurzel ist eine security-scoped URL aus dem `UIDocumentPicker`. Der
+/// Zugriff wird in `connect()` geöffnet und in `disconnect()` wieder freigegeben,
+/// damit er während des gesamten Sync-Laufs gültig bleibt.
+final class LocalStorageProvider: StorageProvider {
+
+    private let root: URL
+    private var isAccessing = false
+
+    init(root: URL) {
+        self.root = root
+    }
+
     func connect() async throws {
-        isConnected = true
-    }
-    
-    /// Verbindung trennen
-    func disconnect() async {
-        isConnected = false
-    }
-    
-    /// Dateien in einem Verzeichnis auflisten
-    func listContents(at path: String) async throws -> [FileItem] {
-        guard isConnected else {
-            throw StorageProviderError.notConnected
+        // Security-scoped Zugriff öffnen (für Picker-URLs außerhalb der Sandbox).
+        isAccessing = root.startAccessingSecurityScopedResource()
+        var isDir: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: root.path, isDirectory: &isDir), isDir.boolValue else {
+            throw StorageProviderError.notFound(root.path)
         }
-        
-        let url = URL(fileURLWithPath: path)
-        let fileManager = FileManager.default
-        
-        let contents = try fileManager.contentsOfDirectory(
-            at: url,
-            includingPropertiesForKeys: [
-                .isDirectoryKey,
-                .contentModificationDateKey,
-                .fileSizeKey
-            ],
-            options: [.skipsHiddenFiles]
-        )
-        
-        return contents.compactMap { url in
-            guard let attributes = try? fileManager.attributesOfItem(atPath: url.path),
-                  let isDirectory = attributes[.type] as? String,
-                  let modifiedDate = attributes[.modificationDate] as? Date else {
-                return nil
-            }
-            
-            let size = attributes[.size] as? Int64 ?? 0
-            let isDir = isDirectory == "NSFileTypeDirectory"
-            
-            return FileItem(
+    }
+
+    func disconnect() async {
+        if isAccessing {
+            root.stopAccessingSecurityScopedResource()
+            isAccessing = false
+        }
+    }
+
+    func listFiles() async throws -> [FileItem] {
+        let fm = FileManager.default
+        let keys: [URLResourceKey] = [.isDirectoryKey, .contentModificationDateKey, .fileSizeKey]
+
+        guard let enumerator = fm.enumerator(
+            at: root,
+            includingPropertiesForKeys: keys,
+            options: [.skipsHiddenFiles, .skipsPackageDescendants]
+        ) else {
+            throw StorageProviderError.notFound(root.path)
+        }
+
+        var items: [FileItem] = []
+        while let url = enumerator.nextObject() as? URL {
+            let values = try url.resourceValues(forKeys: Set(keys))
+            if values.isDirectory == true { continue } // nur Dateien
+
+            items.append(FileItem(
                 name: url.lastPathComponent,
                 path: url.path,
-                isDirectory: isDir,
-                size: size,
-                modifiedDate: modifiedDate
-            )
+                relativePath: Self.relativePath(of: url, under: root),
+                isDirectory: false,
+                size: Int64(values.fileSize ?? 0),
+                modifiedDate: values.contentModificationDate ?? Date()
+            ))
         }
+        return items
     }
-    
-    /// Datei als Data lesen
-    func readFile(at path: String) async throws -> Data {
-        guard isConnected else {
-            throw StorageProviderError.notConnected
-        }
-        
-        let url = URL(fileURLWithPath: path)
+
+    func readData(at relativePath: String) async throws -> Data {
+        let url = root.appendingPathComponent(relativePath)
         guard let data = try? Data(contentsOf: url) else {
-            throw StorageProviderError.notFound(path)
+            throw StorageProviderError.notFound(relativePath)
         }
-        
         return data
     }
-    
-    /// Datei schreiben
-    func writeFile(data: Data, to path: String, progress: @Sendable @escaping (Double) -> Void) async throws {
-        guard isConnected else {
-            throw StorageProviderError.notConnected
+
+    func upload(from localURL: URL, to relativePath: String,
+                progress: @escaping (Double) -> Void) async throws {
+        let target = root.appendingPathComponent(relativePath)
+        let fm = FileManager.default
+        try fm.createDirectory(at: target.deletingLastPathComponent(),
+                               withIntermediateDirectories: true)
+        if fm.fileExists(atPath: target.path) {
+            try fm.removeItem(at: target)
         }
-        
-        let url = URL(fileURLWithPath: path)
-        let parentDir = url.deletingLastPathComponent()
-        
-        // Verzeichnis erstellen falls nötig
-        var isDirectory: ObjCBool = false
-        if !FileManager.default.fileExists(atPath: parentDir.path, isDirectory: &isDirectory) {
-            try FileManager.default.createDirectory(at: parentDir, withIntermediateDirectories: true)
-        }
-        
-        // Datei schreiben (ohne echten Fortschritt für lokale Dateien)
-        try data.write(to: url)
+        try fm.copyItem(at: localURL, to: target)
         progress(1.0)
     }
-    
-    /// Datei löschen
-    func deleteFile(at path: String) async throws {
-        guard isConnected else {
-            throw StorageProviderError.notConnected
+
+    func download(at relativePath: String, to localURL: URL,
+                  progress: @escaping (Double) -> Void) async throws {
+        let source = root.appendingPathComponent(relativePath)
+        let fm = FileManager.default
+        if fm.fileExists(atPath: localURL.path) {
+            try fm.removeItem(at: localURL)
         }
-        
-        let url = URL(fileURLWithPath: path)
+        try fm.copyItem(at: source, to: localURL)
+        progress(1.0)
+    }
+
+    func delete(at relativePath: String) async throws {
+        let url = root.appendingPathComponent(relativePath)
         try FileManager.default.removeItem(at: url)
     }
-    
-    /// Ordner erstellen
-    func createDirectory(at path: String) async throws {
-        guard isConnected else {
-            throw StorageProviderError.notConnected
-        }
-        
-        let url = URL(fileURLWithPath: path)
-        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+
+    func setModificationDate(_ date: Date, at relativePath: String) async {
+        let url = root.appendingPathComponent(relativePath)
+        try? FileManager.default.setAttributes([.modificationDate: date], ofItemAtPath: url.path)
     }
-    
-    /// Metadaten für eine Datei lesen
-    func getMetadata(for path: String) async throws -> FileItem {
-        guard isConnected else {
-            throw StorageProviderError.notConnected
-        }
-        
-        let url = URL(fileURLWithPath: path)
-        let fileManager = FileManager.default
-        
-        let attributes = try fileManager.attributesOfItem(atPath: path)
-        guard let isDirectory = attributes[.type] as? String,
-              let modifiedDate = attributes[.modificationDate] as? Date else {
-            throw StorageProviderError.notFound(path)
-        }
-        
-        let size = attributes[.size] as? Int64 ?? 0
-        let isDir = isDirectory == "NSFileTypeDirectory"
-        
-        return FileItem(
-            name: url.lastPathComponent,
-            path: path,
-            isDirectory: isDir,
-            size: size,
-            modifiedDate: modifiedDate
-        )
-    }
-    
-    /// Hash berechnen (client-seitig)
-    func calculateHash(for path: String) async throws -> String {
-        guard isConnected else {
-            throw StorageProviderError.notConnected
-        }
-        
-        let data = try await readFile(at: path)
-        return data.sha256
-    }
-    
-    /// Freier Speicherplatz
+
     func getFreeSpace() async throws -> Int64 {
-        let fileManager = FileManager.default
-        let paths = fileManager.urls(for: .documentDirectory, in: .userDomainMask)
-        guard let documents = paths.first else { return 0 }
-        
-        guard let attributes = try? fileManager.attributesOfFileSystem(forPath: documents.path),
-              let freeSpace = attributes[.systemFreeSize] as? Int64 else {
-            return 0
-        }
-        
-        return freeSpace
+        let values = try root.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
+        return values.volumeAvailableCapacityForImportantUsage ?? Int64.max
     }
-    
-    /// Verbindungstest (lokal immer erfolgreich)
+
     func testConnection() async -> Bool {
-        true
+        do {
+            try await connect()
+            await disconnect()
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    /// Pfad von `url` relativ zu `base` (POSIX, ohne führenden Slash).
+    static func relativePath(of url: URL, under base: URL) -> String {
+        let baseComponents = base.standardizedFileURL.pathComponents
+        let urlComponents = url.standardizedFileURL.pathComponents
+        guard urlComponents.count > baseComponents.count,
+              Array(urlComponents.prefix(baseComponents.count)) == baseComponents else {
+            return url.lastPathComponent
+        }
+        return urlComponents.dropFirst(baseComponents.count).joined(separator: "/")
     }
 }

@@ -23,9 +23,12 @@ class KeychainStore {
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service ?? serviceName,
             kSecAttrAccount as String: account,
-            kSecValueData as String: password.data(using: .utf8)!
+            kSecValueData as String: password.data(using: .utf8)!,
+            // Zugriff auch im Hintergrund (z. B. während eines Backups) nach
+            // erstem Entsperren des Geräts; verlässt das Gerät nicht im Backup.
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         ]
-        
+
         // Delete existing item first
         SecItemDelete(query as CFDictionary)
         

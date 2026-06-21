@@ -88,16 +88,6 @@ targets:
       base:
         BUNDLE_LOADER: "$(TEST_HOST)"
         TEST_HOST: "$(BUILT_PRODUCTS_DIR)/MobileBackupSync.app/MobileBackupSync"
-    dependencies:
-      - target: MobileBackupSync
-
-  MobileBackupSyncUITests:
-    type: bundle.ui-testing
-    platform: iOS
-    sources:
-      - path: MobileBackupSyncUITests
-    settings:
-      base:
-        TEST_TARGET_NAME: MobileBackupSync
+        GENERATE_INFOPLIST_FILE: YES
     dependencies:
       - target: MobileBackupSync

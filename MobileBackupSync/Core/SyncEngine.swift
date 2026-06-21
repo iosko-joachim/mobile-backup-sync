@@ -40,18 +40,13 @@ class SyncEngine: ObservableObject {
     
     /// TransferManager für Transfers
     private let transferManager: TransferManager
-    
-    /// ConflictResolver für Konflikte
-    private let conflictResolver: ConflictResolver
-    
+
     init(
         compareEngine: CompareEngine = CompareEngine(),
-        transferManager: TransferManager = TransferManager(),
-        conflictResolver: ConflictResolver = ConflictResolver()
+        transferManager: TransferManager = TransferManager()
     ) {
         self.compareEngine = compareEngine
         self.transferManager = transferManager
-        self.conflictResolver = conflictResolver
     }
     
     /// Sync-Job ausführen
@@ -59,6 +54,7 @@ class SyncEngine: ObservableObject {
         reset()
         
         guard !isCancelled else {
+            status = .cancelled
             return SyncResult(status: .cancelled, filesProcessed: 0)
         }
         
@@ -113,9 +109,9 @@ class SyncEngine: ObservableObject {
                 }
             )
             
-            status = .done
+            status = result.status
             return result
-            
+
         } catch let error as SyncError {
             status = .failed(error.localizedDescription)
             throw error

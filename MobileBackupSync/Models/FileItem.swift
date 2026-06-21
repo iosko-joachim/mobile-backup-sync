@@ -11,22 +11,26 @@ import Foundation
 struct FileItem: Identifiable, Equatable {
     let id: UUID
     let name: String
+    /// Vollständiger Pfad am Speicherort (zum Lesen/Schreiben).
     let path: String
+    /// Pfad relativ zur Sync-Wurzel – Schlüssel für Vergleich und Zielpfad-Bildung.
+    let relativePath: String
     let isDirectory: Bool
     let size: Int64
     let modifiedDate: Date
     let hash: String?
-    
+
     /// Sync-Status dieser Datei
     var syncStatus: FileSyncStatus = .unchanged
-    
+
     /// Konflikt-Information (falls zutreffend)
     var conflict: ConflictInfo?
-    
+
     init(
         id: UUID = UUID(),
         name: String,
         path: String,
+        relativePath: String? = nil,
         isDirectory: Bool,
         size: Int64,
         modifiedDate: Date,
@@ -35,6 +39,7 @@ struct FileItem: Identifiable, Equatable {
         self.id = id
         self.name = name
         self.path = path
+        self.relativePath = relativePath ?? name
         self.isDirectory = isDirectory
         self.size = size
         self.modifiedDate = modifiedDate
