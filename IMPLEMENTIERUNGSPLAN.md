@@ -544,6 +544,37 @@ gemeinsamen Schlüssel abgeglichen — genau die Grundlage für ein Zweispalter-
 > - **Nächster Schritt:** ein librclone-Spike (ein Cloud-Backend + ein echter SMB-Lauf
 >   gegen die FRITZ!Box), um die Konsolidierung zu validieren, bevor man sich festlegt.
 
+##### „Hash ohne Download" — Time-Saver-Matrix (querschnittlich)
+
+Verallgemeinerung der server-seitigen SSH-Hashung (§3.3): **nur den Digest übers Netz
+holen statt der ganzen Datei.** Bei SSH per Remote-Exec, bei den **Clouds gratis aus
+den Datei-Metadaten** (genau hier kommt Google Drive rein). Das macht
+Hash-Vergleich über das Netz überhaupt erst bezahlbar.
+
+| Backend | Hash ohne Download | Algorithmus | Caveat |
+|---|---|---|---|
+| **Google Drive** | ✅ Metadaten | MD5, SHA-1, **SHA-256** | nicht für native Google-Docs/Sheets/Slides |
+| **Dropbox** | ✅ Metadaten | `content_hash` (block-SHA-256) | eigener Algo → lokal nachbauen |
+| **OneDrive/SharePoint** | ✅ Metadaten | QuickXorHash (Business), SHA-1/256 (Personal) | Algo variiert je Konto |
+| **Box** | ✅ Metadaten | SHA-1 | — |
+| **Amazon S3 / kompatibel** | ✅ ETag / `x-amz-checksum` | MD5 (single-part); opt. CRC/SHA | **Multipart-ETag ≠ MD5** |
+| **Backblaze B2** | ✅ Metadaten | SHA-1 | — |
+| **pCloud** | ✅ API | SHA-1/SHA-256/MD5 | — |
+| **SFTP/SSH** | ✅ Remote-Exec | frei (sha256sum …) | nur mit Shell (§3.3) |
+| **WebDAV/Nextcloud** | ⚠️ teils | OC-Checksum (SHA1/MD5) | nur wenn serverseitig aktiv |
+| **FTP** | ⚠️ selten | `HASH`/`XSHA256` (RFC-Draft) | FRITZ!Box: nein |
+| **SMB** | ❌ | — | kein Remote-Hash → Download nötig |
+| **iCloud Drive** | ❌ (über Files) | — | erst nach Download lokal hashen |
+
+- [ ] **Protokoll-Fähigkeit** `remoteHash(at:) -> (algo, digest)?` am `StorageProvider`
+      (optional, default `nil`); CompareEngine nutzt sie, **bevor** es zum Download greift.
+- [ ] **Algorithmus-Verhandlung**: nur vergleichen, wenn beide Seiten denselben Algo
+      ohne Download liefern können; sonst Fallback Größe+Datum, Download-zum-Hashen als
+      letzte Option (konfigurierbar/abschaltbar).
+- [ ] **Exotische Algos** lokal implementieren (QuickXorHash, Dropbox-`content_hash`) —
+      **oder** über librclone beziehen: rclones Hash-Abstraktion hat sie alle bereits
+      (starkes Argument für die librclone-Variante oben).
+
 - [ ] `CloudStorageProvider` Basis-Interface (bzw. `RcloneProvider` bei Variante B)
 
 - [ ] Google Drive
@@ -1097,3 +1128,4 @@ fließen immer durch den Mover (Egress-Kosten, API-Rate-Limits, Token-Verwahrung
 | 0.6 | 2026-06-21 | - | rclone deckt auch SMB/FTP ab; strategische Option „rclone-Frontend" (§3.1) |
 | 0.7 | 2026-06-21 | - | Sektion „Positionierung & Abgrenzung": Wettbewerb, Moat, kuratierte Backends, Rolle librclone als Cloud-Motor |
 | 0.8 | 2026-06-21 | - | Option server-seitige Hash-Berechnung über SSH ausgearbeitet (§3.3) |
+| 0.9 | 2026-06-21 | - | „Hash ohne Download"-Matrix über alle Backends (§3.1), inkl. Google Drive & Cloud-Metadaten-Hashes |
