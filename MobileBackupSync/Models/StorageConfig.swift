@@ -77,7 +77,7 @@ struct SSHConfig: Codable, Equatable {
 }
 
 /// SSH-Authentifizierungsmethode
-enum SSHAuthMethod: Codable, Equatable {
+enum SSHAuthMethod: Codable, Hashable, Equatable {
     case password
     case key(String) // Key-Name im Keychain
     
