@@ -911,6 +911,59 @@ esac
 
 ---
 
+## Verwandtes Projekt-Konzept: Headless Protokoll-Konverter (Cloud-zu-Cloud)
+
+> Eigenständiges Schwester-Projekt, **nicht** Teil der iOS-App. Hier nur als
+> Konzept festgehalten.
+
+**Idee:** Ein Sync-/Konverter-Dienst, der direkt zwischen zwei Remote-Endpunkten
+synchronisiert (z. B. **Nextcloud → Google Drive**), ohne das Telefon als Motor.
+
+**Warum es zur App passt:** Das `StorageProvider`-Protokoll des MVP ist bereits
+protokoll-agnostisch (Quelle → Ziel über eine Zwischendatei). Ein Konverter ist
+dasselbe Muster **ohne die lokale Etappe**, nur mit zwei Remote-Providern — und
+könnte sich das Provider-Design teilen (anderes Repo, andere Laufzeit/Sprache).
+
+**Wo es läuft — nicht auf dem iPhone:**
+- iOS lässt keine dauerhaften Hintergrundprozesse/CLI-Daemons zu → kein 24/7-Sync
+  auf dem Telefon.
+- Richtiger Ort: ein Gerät, das durchläuft — **NAS, Mini-Server, Nextcloud-Box**
+  oder Cloud-VM (gern in Docker).
+- Das **iPhone wird Fernsteuerung/Monitoring**, nicht der Motor.
+
+**Prior Art / Messlatte: rclone** (Go, ~70 Backends inkl. WebDAV/Nextcloud, Google
+Drive, Dropbox, S3 …) mit `rclone rcd` (Remote-Control-Daemon, HTTP/JSON-API + Web-GUI).
+Ein Eigenbau lohnt nur für etwas, das rclone nicht gut kann (z. B. die
+BeyondCompare-artige Vergleichs-/Merge-Logik, eigene Policy/UI) — sonst baut man
+rclone nach.
+
+**Der eigentliche Knackpunkt: Erreichbarkeit** (zwei getrennte Fragen)
+
+1. *Telefon → Motor:* über die `rcd`-API. Cloud-VM = öffentlicher Endpunkt
+   (zwingend Auth + TLS); NAS = nur via Tunnel/VPN von unterwegs.
+2. *Motor → Datenquellen:* Cloud↔Cloud unproblematisch (beide öffentlich), aber
+   **LAN-Quellen** (SMB, Nextcloud im LAN, FRITZ!Box-NAS, oft hinter CGNAT/dyn. IP)
+   erreicht eine Cloud-VM **nicht** ohne Tunnel.
+
+| Motor läuft… | Cloud-Ziele | Heim-NAS | Telefon-Zugriff | Daten/Tokens |
+|---|---|---|---|---|
+| Cloud-VM | ✅ | ❌ (nur Tunnel) | ✅ einfach | bei Dritt-Anbieter (revDSG) |
+| Heim-NAS | ✅ (ausgehend) | ✅ nativ | ⚠️ Tunnel nötig | bei dir |
+
+**Empfohlene Topologie — Mesh-VPN:** NAS, iPhone (+ optional Cloud-Node) per
+**Tailscale/WireGuard** in einem privaten Netz. Telefon erreicht den NAS-rclone von
+überall ohne Portfreigabe; der Motor erreicht LAN-Quellen nativ *und* ausgehend alle
+Clouds; nichts öffentlich exponiert; Daten + OAuth-Tokens bleiben bei dir.
+
+**Alternative ohne VPN:** „outbound-only" — der Motor baut alle Verbindungen selbst
+auf (pollt eine Job-Queue, pusht Status). Nichts eingehend offen, funktioniert hinter
+CGNAT; Preis ist eine kleine Broker-Komponente in der Mitte.
+
+**Ehrliche Grenze:** Cross-Provider gibt es **kein** echtes server-side copy — Daten
+fließen immer durch den Mover (Egress-Kosten, API-Rate-Limits, Token-Verwahrung).
+
+---
+
 ## Dokumenten-Historie
 
 | Version | Datum | Autor | Änderung |
@@ -918,3 +971,4 @@ esac
 | 0.1 | 2026-06-20 | - | Erster Entwurf (iOS nur) |
 | 0.2 | 2026-06-20 | - | Android-Unterstützung hinzugefügt, KMP-Architektur |
 | 0.3 | 2026-06-21 | - | iOS-First Strategie, Android als spätere Phase |
+| 0.4 | 2026-06-21 | - | Gegencheck-Korrekturen, FTP/FTPS, iPad-Zweispalter (§2.6), Konzept Headless Protokoll-Konverter |
