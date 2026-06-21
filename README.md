@@ -1,103 +1,81 @@
 # Mobile Backup & Sync
 
-Eine native iOS-App (SwiftUI) für Backup, Synchronisation und Dateivergleich zwischen mobilen Geräten und verschiedenen Speicherzielen.
+Eine native iOS-App (SwiftUI) für Backup und Dateivergleich zwischen dem iPhone/iPad
+und einem Netzwerkspeicher (SMB- oder FTP-NAS).
 
 ## Status
 
-**Phase:** Entwicklung (iOS-First)
+**MVP – lauffähig.** Einweg-Backup von einem lokalen Ordner auf eine SMB-Freigabe
+oder einen FTP-Server (und zurück als Restore), mit Vorschau und Protokoll. Details
+siehe [REPORT.md](REPORT.md).
 
-Geplante Funktionen siehe [IMPLEMENTIERUNGSPLAN.md](../IMPLEMENTIERUNGSPLAN.md).
+## Funktionen
 
-## Geplante Architektur
+- Lokaler Ordner (iOS Files / `UIDocumentPicker`) als Quelle oder Ziel
+- SMB/CIFS-Freigabe als Quelle oder Ziel (AMSMB2 / libsmb2)
+- FTP-Server als Quelle oder Ziel (plain, passiv, über `Network.framework`; FTPS folgt)
+- Rekursiver Vergleich nach Größe, Datum und optional SHA-256-Hash
+- Vorschau vor dem Kopieren, optionaler Dry Run
+- Modi: Backup, Mirror (mit Löschen am Ziel), Bidirektional (Konflikt-Markierung)
+- Passwörter im iOS-Keychain
+- Protokoll mit Export
+
+## Architektur
 
 ```
-+-----------------------------------------------------------------------+
-|                        iOS Applikation (SwiftUI)                      |
-+-----------------------------------------------------------------------+
-|  UI Layer                                                             |
-|  - Dashboard                                                          |
-|  - Vergleichsansicht                                                  |
-|  - Konfiguration                                                      |
-|  - Protokoll                                                          |
-+-----------------------------------------------------------------------+
-|  Core Layer (Swift)                                                   |
-|  - SyncEngine                                                         |
-|  - CompareEngine                                                      |
-|  - TransferManager                                                    |
-|  - ConflictResolver                                                   |
-+-----------------------------------------------------------------------+
-|  Storage Providers                                                    |
-|  - LocalStorageProvider (iOS Dateisystem)                             |
-|  - SMBStorageProvider (SMB/CIFS)                                      |
-|  - SSHStorageProvider (SFTP + Server-Helper)                          |
-|  - WebDAVStorageProvider (Nextcloud, etc.)                            |
-|  - CloudStorageProvider (Google Drive, OneDrive, Dropbox)             |
-+-----------------------------------------------------------------------+
-|  Infrastructure                                                       |
-|  - HashService (SHA-256, MD5)                                         |
-|  - EncryptionService (optional, AES-256)                              |
-|  - LogService                                                         |
-|  - SchedulerService (Hintergrundtasks)                                |
-+-----------------------------------------------------------------------+
++-----------------------------------------------------------+
+|  UI (SwiftUI)                                             |
+|  Tabs: Backup · Jobs · Protokoll · Einstellungen          |
++-----------------------------------------------------------+
+|  Core                                                     |
+|  SyncEngine → CompareEngine · TransferManager             |
++-----------------------------------------------------------+
+|  Storage Providers                                        |
+|  StorageProvider (Protokoll)                              |
+|   ├─ LocalStorageProvider (iOS Dateisystem)               |
+|   ├─ SMBStorageProvider   (SMB/CIFS via AMSMB2)           |
+|   └─ FTPStorageProvider   (FTP via Network.framework)     |
++-----------------------------------------------------------+
+|  Services                                                 |
+|  HashService · KeychainStore · SettingsStore · LogService |
++-----------------------------------------------------------+
 ```
 
-## MVP-Scope (Phase 1)
-
-1. Quelle: lokaler iPhone-Speicher
-2. Ziel: SMB-Server
-3. Einweg-Backup
-4. Vergleich nach Datum, Größe und optional Hash
-5. Vorschau vor Kopiervorgang
-6. Protokoll nach Abschluss
-7. Einfache Fehlerbehandlung
-8. Manuelles Starten des Backups
+Jeder Provider kennt seine Wurzel; alle Pfade sind relativ dazu, wodurch der
+`TransferManager` provider-agnostisch über eine temporäre Datei kopiert.
 
 ## Technologie-Stack
 
-| Komponente | Technologie |
-|------------|-------------|
-| iOS App | Swift, SwiftUI |
-| Mindest-iOS-Version | iOS 16 |
-| Architektur | MVVM + Clean Architecture |
-| SMB | MobileSMB / SMBJ |
-| SSH/SFTP | NMSSH |
-| Hashing | CryptoKit (native) |
-| Key-Storage | Keychain (native) |
+| Komponente          | Technologie            |
+|---------------------|------------------------|
+| App                 | Swift, SwiftUI         |
+| Mindest-iOS-Version | iOS 16                 |
+| SMB                 | AMSMB2 (libsmb2)       |
+| FTP                 | Network.framework      |
+| Hashing             | CryptoKit (SHA-256)    |
+| Key-Storage         | Keychain               |
+| Projektgenerierung  | XcodeGen               |
 
-## Projektstruktur (geplant)
+## Build
 
+Voraussetzung: Xcode 16+, [XcodeGen](https://github.com/yonaskolb/XcodeGen)
+(`brew install xcodegen`).
+
+```sh
+xcodegen generate
+open MobileBackupSync.xcodeproj
 ```
-MobileBackupSync/
-├── App/
-│   └── MobileBackupSyncApp.swift
-├── Models/
-│   ├── FileItem.swift
-│   ├── SyncJob.swift
-│   └── SyncResult.swift
-├── Core/
-│   ├── SyncEngine.swift
-│   ├── CompareEngine.swift
-│   ├── TransferManager.swift
-│   └── ConflictResolver.swift
-├── Providers/
-│   ├── LocalStorageProvider.swift
-│   ├── SMBStorageProvider.swift
-│   ├── SSHStorageProvider.swift
-│   ├── WebDAVStorageProvider.swift
-│   └── CloudStorageProvider.swift
-├── Services/
-│   ├── HashService.swift
-│   ├── EncryptionService.swift
-│   ├── LogService.swift
-│   └── SchedulerService.swift
-├── Views/
-│   ├── Dashboard/
-│   ├── Compare/
-│   ├── Settings/
-│   └── Logs/
-└── Utilities/
-    └── Extensions/
-```
+
+Das Xcode-Projekt wird generiert und ist nicht eingecheckt (siehe `.gitignore`).
+
+## Ausblick (nicht im MVP)
+
+- **FTPS (FTP über TLS)** — verschlüsselte Variante des vorhandenen FTP-Providers
+  (explizit `AUTH TLS`); nötig für FTP über unsichere Netze
+- Weitere Ziele: SSH/SFTP, WebDAV (Nextcloud), Cloud-Anbieter
+- Geplante/Hintergrund-Ausführung, „nur im WLAN / beim Laden"
+- Optionale Verschlüsselung, parallele Transfers
+- Automatische Konfliktauflösung im bidirektionalen Modus
 
 ## License
 
@@ -105,5 +83,5 @@ Proprietary
 
 ## Related
 
-- [Legacy-Projekt](https://github.com/iosko-joachim/NAS-backup) - Bestehende SMB-Backup-Lösung
-- [Implementierungsplan](../IMPLEMENTIERUNGSPLAN.md) - Detaillierter Entwicklungsplan
+- [IMPLEMENTIERUNGSPLAN.md](IMPLEMENTIERUNGSPLAN.md) – Roadmap (inkl. Korrekturen aus dem Gegencheck)
+- [Legacy-Projekt: NAS-backup](https://github.com/iosko-joachim/NAS-backup) – bestehende SMB-/FTP-Backup-Lösung (TestFlight)

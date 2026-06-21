@@ -7,96 +7,85 @@
 
 import Foundation
 
-/// Engine für den Vergleich von Quelle und Ziel
-class CompareEngine {
-    
-    /// Quelle und Ziel vergleichen
+/// Engine für den rekursiven Vergleich von Quelle und Ziel.
+/// Dateien werden über ihren `relativePath` einander zugeordnet.
+final class CompareEngine {
+
+    /// Quelle und Ziel vergleichen.
     func compare(
         source: StorageLocation,
         destination: StorageLocation,
         options: SyncOptions
     ) async throws -> CompareResult {
         var result = CompareResult()
-        
-        // 1. Dateien auf Quelle auflisten
-        let sourceFiles = try await listFiles(at: source)
-        
-        // 2. Dateien auf Ziel auflisten
-        let destinationFiles = try await listFiles(at: destination)
-        
-        // 3. Vergleichen
+
+        let sourceProvider = source.makeProvider()
+        let destProvider = destination.makeProvider()
+
+        try await sourceProvider.connect()
+        defer { Task { await sourceProvider.disconnect() } }
+        try await destProvider.connect()
+        defer { Task { await destProvider.disconnect() } }
+
+        let sourceFiles = try await sourceProvider.listFiles()
+        let destFiles = try await destProvider.listFiles()
+        let destByPath = Dictionary(destFiles.map { ($0.relativePath, $0) }, uniquingKeysWith: { a, _ in a })
+        let sourcePaths = Set(sourceFiles.map(\.relativePath))
+
         for sourceFile in sourceFiles {
-            if let destFile = destinationFiles.first(where: { $0.name == sourceFile.name }) {
-                // Datei existiert auf beiden Seiten - vergleichen
-                let status = compareFiles(sourceFile, destFile, options: options)
-                
-                switch status {
-                case .unchanged:
-                    result.unchangedFiles.append(sourceFile)
-                case .modified:
-                    result.modifiedFiles.append(sourceFile)
-                case .conflict:
-                    result.conflictFiles.append(sourceFile)
-                default:
-                    break
-                }
-            } else {
-                // Datei nur auf Quelle - neu
-                result.newFiles.append(sourceFile)
+            guard let destFile = destByPath[sourceFile.relativePath] else {
+                var f = sourceFile; f.syncStatus = .new
+                result.newFiles.append(f)
+                continue
+            }
+
+            let status = try await compareFiles(
+                sourceFile, destFile,
+                options: options,
+                sourceProvider: sourceProvider,
+                destProvider: destProvider
+            )
+            var f = sourceFile; f.syncStatus = status
+            switch status {
+            case .modified: result.modifiedFiles.append(f)
+            case .conflict: result.conflictFiles.append(f)
+            default: result.unchangedFiles.append(f)
             }
         }
-        
-        // 4. Gelöschte Dateien finden (nur auf Ziel)
-        for destFile in destinationFiles {
-            if !sourceFiles.contains(where: { $0.name == destFile.name }) {
-                result.deletedFiles.append(destFile)
-            }
+
+        // Nur am Ziel vorhandene Dateien gelten als "gelöscht" (relevant für Mirror).
+        for destFile in destFiles where !sourcePaths.contains(destFile.relativePath) {
+            var f = destFile; f.syncStatus = .deleted
+            result.deletedFiles.append(f)
         }
-        
+
         return result
     }
-    
-    /// Dateien an einem Speicherort auflisten
-    private func listFiles(at location: StorageLocation) async throws -> [FileItem] {
-        switch location {
-        case .local(let url):
-            let provider = LocalStorageProvider()
-            try await provider.connect()
-            return try await provider.listContents(at: url.path)
-            
-        case .smb(let config):
-            let provider = SMBStorageProvider(config: config)
-            try await provider.connect()
-            return try await provider.listContents(at: "/" + config.share + "/" + config.path)
-            
-        case .ssh, .webdav, .cloud:
-            // TODO: Implementierung für andere Provider
-            return []
-        }
-    }
-    
-    /// Zwei Dateien vergleichen
+
+    /// Zwei Dateien vergleichen (Größe → Datum → optional Hash).
     private func compareFiles(
         _ source: FileItem,
         _ destination: FileItem,
-        options: SyncOptions
-    ) -> FileSyncStatus {
-        // Nach Größe vergleichen (schnell)
+        options: SyncOptions,
+        sourceProvider: StorageProvider,
+        destProvider: StorageProvider
+    ) async throws -> FileSyncStatus {
         if source.size != destination.size {
             return .modified
         }
-        
-        // Nach Datum vergleichen
+
         let timeDiff = abs(source.modifiedDate.timeIntervalSince(destination.modifiedDate))
-        if timeDiff > 2 { // 2 Sekunden Toleranz
-            return .modified
-        }
-        
-        // Optional: Nach Hash vergleichen (genau, aber langsam)
+
         if options.compareByHash {
-            // TODO: Hash-Vergleich implementieren
+            // Größe gleich – Inhalt per Hash absichern.
+            let sourceHash = (try? await sourceProvider.readData(at: source.relativePath))?.sha256
+            let destHash = (try? await destProvider.readData(at: destination.relativePath))?.sha256
+            if let s = sourceHash, let d = destHash {
+                return s == d ? .unchanged : .modified
+            }
         }
-        
-        return .unchanged
+
+        // 2 Sekunden Toleranz für Zeitstempel-Ungenauigkeiten (z. B. FAT/SMB).
+        return timeDiff > 2 ? .modified : .unchanged
     }
 }

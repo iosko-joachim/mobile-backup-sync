@@ -6,27 +6,23 @@
 //
 
 import SwiftUI
-import UniformTypeIdentifiers
 
+/// Auswahl eines Speicherorts (lokaler Ordner oder SMB-Freigabe).
 struct StoragePickerView: View {
-    
+
     @Environment(\.dismiss) var dismiss
     @Binding var selection: StorageLocation?
     @State private var selectedType: StorageType = .local
     @State private var smbConfig = SMBConfig()
-    @State private var sshConfig = SSHConfig()
-    @State private var webdavConfig = WebDAVConfig()
-    @State private var cloudConfig = CloudConfig()
+    @State private var ftpConfig = FTPConfig()
     @State private var localURL: URL?
-    
+
     enum StorageType: String, CaseIterable {
         case local = "Lokal"
         case smb = "SMB"
-        case ssh = "SSH/SFTP"
-        case webdav = "WebDAV"
-        case cloud = "Cloud"
+        case ftp = "FTP"
     }
-    
+
     var body: some View {
         NavigationStack {
             Form {
@@ -35,26 +31,21 @@ struct StoragePickerView: View {
                         Text(type.rawValue).tag(type)
                     }
                 }
-                
+                .pickerStyle(.segmented)
+
                 switch selectedType {
                 case .local:
                     LocalStorageSection(url: $localURL, selection: $selection)
                 case .smb:
                     SMBConfigSection(config: $smbConfig, selection: $selection)
-                case .ssh:
-                    SSHConfigSection(config: $sshConfig, selection: $selection)
-                case .webdav:
-                    WebDAVConfigSection(config: $webdavConfig, selection: $selection)
-                case .cloud:
-                    CloudConfigSection(config: $cloudConfig, selection: $selection)
+                case .ftp:
+                    FTPConfigSection(config: $ftpConfig, selection: $selection)
                 }
             }
             .navigationTitle("Speicherort")
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Fertig") {
-                        dismiss()
-                    }
+                    Button("Fertig") { dismiss() }
                 }
             }
         }
@@ -64,10 +55,10 @@ struct StoragePickerView: View {
 // MARK: - Local Storage Section
 
 struct LocalStorageSection: View {
-    
+
     @Binding var url: URL?
     @Binding var selection: StorageLocation?
-    
+
     var body: some View {
         Section("Lokaler Speicher") {
             DocumentPickerButton(
@@ -77,8 +68,8 @@ struct LocalStorageSection: View {
                     selection = .local(pickedURL)
                 }
             )
-            
-            if let url = url {
+
+            if let url {
                 HStack {
                     Image(systemName: "folder.fill")
                     Text(url.lastPathComponent)
@@ -95,209 +86,162 @@ struct LocalStorageSection: View {
 // MARK: - SMB Config Section
 
 struct SMBConfigSection: View {
-    
+
     @Binding var config: SMBConfig
     @Binding var selection: StorageLocation?
     @State private var password = ""
     @State private var testingConnection = false
     @State private var testResult: Bool?
-    
+
     var body: some View {
         Section("SMB-Server") {
             TextField("Name", text: $config.name)
             TextField("Host (IP oder Hostname)", text: $config.host)
                 .keyboardType(.asciiCapable)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
             TextField("Freigabe", text: $config.share)
             TextField("Pfad (optional)", text: $config.path)
             TextField("Benutzername", text: $config.username)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
             SecureField("Passwort", text: $password)
-            
+
+            HStack {
+                Button(action: testConnection) {
+                    Label("Verbindung testen", systemImage: "checkmark.circle")
+                }
+                .disabled(config.host.isEmpty || config.share.isEmpty)
+
+                if testingConnection {
+                    ProgressView().scaleEffect(0.7)
+                }
+                if let testResult {
+                    Image(systemName: testResult ? "checkmark.circle.fill" : "xmark.circle.fill")
+                        .foregroundColor(testResult ? .green : .red)
+                }
+            }
+        }
+
+        Section {
+            Button(action: save) {
+                HStack { Spacer(); Text("Speichern"); Spacer() }
+            }
+            .disabled(config.host.isEmpty || config.share.isEmpty)
+        }
+    }
+
+    /// Speichert das Passwort vor dem Test, damit der Provider es nutzen kann.
+    private func persistPassword() {
+        if !password.isEmpty {
+            SettingsStore.shared.saveSMBPassword(
+                host: config.host,
+                username: config.username,
+                password: password
+            )
+        }
+    }
+
+    private func testConnection() {
+        persistPassword()
+        testingConnection = true
+        testResult = nil
+        Task {
+            let provider = SMBStorageProvider(config: config)
+            let success = await provider.testConnection()
+            await MainActor.run {
+                testResult = success
+                testingConnection = false
+            }
+        }
+    }
+
+    private func save() {
+        persistPassword()
+        selection = .smb(config)
+    }
+}
+
+// MARK: - FTP Config Section
+
+struct FTPConfigSection: View {
+
+    @Binding var config: FTPConfig
+    @Binding var selection: StorageLocation?
+    @State private var password = ""
+    @State private var testingConnection = false
+    @State private var testResult: Bool?
+
+    var body: some View {
+        Section {
+            TextField("Name", text: $config.name)
+            TextField("Host (IP oder Hostname)", text: $config.host)
+                .keyboardType(.asciiCapable)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+            TextField("Port", value: $config.port, format: .number.grouping(.never))
+                .keyboardType(.numberPad)
+            TextField("Pfad (optional)", text: $config.path)
+            TextField("Benutzername", text: $config.username)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+            SecureField("Passwort", text: $password)
+
             HStack {
                 Button(action: testConnection) {
                     Label("Verbindung testen", systemImage: "checkmark.circle")
                 }
                 .disabled(config.host.isEmpty)
-                
+
                 if testingConnection {
-                    ProgressView()
-                        .scaleEffect(0.5)
+                    ProgressView().scaleEffect(0.7)
                 }
-                
-                if let result = testResult {
-                    Image(systemName: result ? "checkmark.circle.fill" : "xmark.circle.fill")
-                        .foregroundColor(result ? .green : .red)
+                if let testResult {
+                    Image(systemName: testResult ? "checkmark.circle.fill" : "xmark.circle.fill")
+                        .foregroundColor(testResult ? .green : .red)
                 }
             }
+        } header: {
+            Text("FTP-Server")
+        } footer: {
+            Text("Plain FTP (passiv). FTPS/TLS ist noch nicht enthalten.")
         }
-        
+
         Section {
             Button(action: save) {
-                HStack {
-                    Spacer()
-                    Text("Speichern")
-                    Spacer()
-                }
-            }
-            .disabled(config.host.isEmpty || config.share.isEmpty)
-        }
-    }
-    
-    private func testConnection() {
-        testingConnection = true
-        Task {
-            let provider = SMBStorageProvider(config: config)
-            let success = await provider.testConnection()
-            testResult = success
-            testingConnection = false
-        }
-    }
-    
-    private func save() {
-        // Passwort im Keychain speichern
-        if !password.isEmpty {
-            SettingsStore.shared.saveSMBPassword(
-                host: config.host,
-                username: config.username,
-                password: password
-            )
-        }
-        selection = .smb(config)
-    }
-}
-
-// MARK: - SSH Config Section
-
-struct SSHConfigSection: View {
-    
-    @Binding var config: SSHConfig
-    @Binding var selection: StorageLocation?
-    @State private var password = ""
-    
-    var body: some View {
-        Section("SSH/SFTP-Server") {
-            TextField("Name", text: $config.name)
-            TextField("Host", text: $config.host)
-                .keyboardType(.asciiCapable)
-            TextField("Pfad", text: $config.path)
-            TextField("Benutzername", text: $config.username)
-            SecureField("Passwort", text: $password)
-            
-            Picker("Authentifizierung", selection: $config.authMethod) {
-                Text("Passwort").tag(SSHAuthMethod.password)
-                Text("SSH-Key").tag(SSHAuthMethod.key("default"))
-            }
-        }
-        
-        Section {
-            Button(action: save) {
-                HStack {
-                    Spacer()
-                    Text("Speichern")
-                    Spacer()
-                }
+                HStack { Spacer(); Text("Speichern"); Spacer() }
             }
             .disabled(config.host.isEmpty)
         }
     }
-    
-    private func save() {
+
+    /// Speichert das Passwort vor dem Test, damit der Provider es nutzen kann.
+    private func persistPassword() {
         if !password.isEmpty {
-            SettingsStore.shared.saveSMBPassword(
+            SettingsStore.shared.saveFTPPassword(
                 host: config.host,
                 username: config.username,
                 password: password
             )
         }
-        selection = .ssh(config)
     }
-}
 
-// MARK: - WebDAV Config Section
-
-struct WebDAVConfigSection: View {
-    
-    @Binding var config: WebDAVConfig
-    @Binding var selection: StorageLocation?
-    @State private var password = ""
-    
-    var body: some View {
-        Section("WebDAV-Server") {
-            TextField("Name", text: $config.name)
-            TextField("URL", text: $config.url)
-                .keyboardType(.URL)
-            TextField("Benutzername", text: $config.username)
-            SecureField("Passwort", text: $password)
-        }
-        
-        Section {
-            Button(action: save) {
-                HStack {
-                    Spacer()
-                    Text("Speichern")
-                    Spacer()
-                }
+    private func testConnection() {
+        persistPassword()
+        testingConnection = true
+        testResult = nil
+        Task {
+            let provider = FTPStorageProvider(config: config)
+            let success = await provider.testConnection()
+            await MainActor.run {
+                testResult = success
+                testingConnection = false
             }
-            .disabled(config.url.isEmpty)
         }
     }
-    
+
     private func save() {
-        selection = .webdav(config)
+        persistPassword()
+        selection = .ftp(config)
     }
-}
-
-// MARK: - Cloud Config Section
-
-struct CloudConfigSection: View {
-    
-    @Binding var config: CloudConfig
-    @Binding var selection: StorageLocation?
-    
-    var body: some View {
-        Section("Cloud-Speicher") {
-            Picker("Provider", selection: $config.provider) {
-                ForEach(CloudProvider.allCases, id: \.self) { provider in
-                    HStack {
-                        Image(systemName: provider.icon)
-                        Text(provider.rawValue)
-                    }
-                    .tag(provider)
-                }
-            }
-            .pickerStyle(.menu)
-            
-            TextField("Pfad (optional)", text: $config.path)
-            
-            Button(action: connectOAuth) {
-                HStack {
-                    Spacer()
-                    Text("Mit \(config.provider.rawValue) verbinden")
-                    Spacer()
-                }
-            }
-        }
-        
-        Section {
-            Button(action: save) {
-                HStack {
-                    Spacer()
-                    Text("Speichern")
-                    Spacer()
-                }
-            }
-        }
-    }
-    
-    private func connectOAuth() {
-        // TODO: OAuth-Flow für Cloud-Provider
-        // Für jetzt nur Placeholder
-    }
-    
-    private func save() {
-        selection = .cloud(config)
-    }
-}
-
-#Preview {
-    StoragePickerView(selection: .constant(nil))
 }

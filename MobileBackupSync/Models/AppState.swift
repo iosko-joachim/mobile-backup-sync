@@ -8,62 +8,112 @@
 import Foundation
 import Combine
 
-/// Zentrale Anwendungsverwaltung
+/// Zentrale Anwendungsverwaltung. Spiegelt den Fortschritt der `SyncEngine`
+/// in die UI und verwaltet Auswahl sowie Job-Historie.
 @MainActor
 class AppState: ObservableObject {
-    /// Aktuell ausgewählte Quelle
-    @Published var selectedSource: StorageLocation?
-    
-    /// Aktuell ausgewähltes Ziel
-    @Published var selectedDestination: StorageLocation?
-    
+    /// Aktuell ausgewählte Quelle (über Neustarts persistiert)
+    @Published var selectedSource: StorageLocation? {
+        didSet { LocationStore.shared.save(selectedSource, for: .source) }
+    }
+
+    /// Aktuell ausgewähltes Ziel (über Neustarts persistiert)
+    @Published var selectedDestination: StorageLocation? {
+        didSet { LocationStore.shared.save(selectedDestination, for: .destination) }
+    }
+
     /// Laufender Sync-Job
     @Published var currentJob: SyncJob?
-    
-    /// Abgeschlossene Jobs (Historie)
+
+    /// Abgeschlossene Jobs (Historie, neueste zuerst)
     @Published var completedJobs: [SyncJob] = []
-    
+
     /// Gesamter Fortschritt (0.0 - 1.0)
     @Published var overallProgress: Double = 0.0
-    
+
     /// Aktuelle Datei im Transfer
     @Published var currentFile: String?
-    
+
     /// Aktueller Status
     @Published var status: SyncStatus = .idle
-    
+
     /// Fehlermeldung
     @Published var errorMessage: String?
-    
+
+    /// Ergebnis des zuletzt gelaufenen Jobs
+    @Published var lastResult: SyncResult?
+
+    /// Engine, die die eigentliche Arbeit erledigt
+    let syncEngine = SyncEngine()
+
+    private var runTask: Task<Void, Never>?
+
     /// Initialisierung
     init() {
-        loadSavedSettings()
+        // Persistierte Auswahl wiederherstellen. Direkte Zuweisung im init löst
+        // `didSet` nicht aus, speichert also nicht unnötig zurück.
+        selectedSource = LocationStore.shared.load(.source)
+        selectedDestination = LocationStore.shared.load(.destination)
+        bindEngine()
     }
-    
-    /// Gespeicherte Einstellungen laden
-    private func loadSavedSettings() {
-        // TODO: Aus SettingsStore laden
+
+    /// Spiegelt die Fortschritts-Publisher der Engine in die App-Zustände.
+    private func bindEngine() {
+        syncEngine.$progress.assign(to: &$overallProgress)
+        syncEngine.$status.assign(to: &$status)
+        syncEngine.$currentFile.assign(to: &$currentFile)
     }
-    
+
+    /// Ob aktuell ein Sync läuft
+    var isRunning: Bool { runTask != nil }
+
     /// Sync starten
     func startSync(job: SyncJob) {
+        guard runTask == nil else { return }
         currentJob = job
-        status = .preparing
-        // TODO: SyncEngine aufrufen
+        errorMessage = nil
+        lastResult = nil
+
+        LogService.shared.log("Backup gestartet: \(job.name)", level: .info)
+
+        runTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                let result = try await self.syncEngine.execute(job: job)
+                var finished = job
+                finished.lastRunAt = Date()
+                self.completedJobs.insert(finished, at: 0)
+                self.lastResult = result
+                let suffix = result.isDryRun ? " (Probelauf)" : ""
+                LogService.shared.log(
+                    "Backup abgeschlossen\(suffix): \(result.filesProcessed) Datei(en), \(result.errors.count) Fehler",
+                    level: result.errors.isEmpty ? .info : .warning
+                )
+            } catch {
+                let message = (error as? SyncError)?.localizedDescription
+                    ?? error.localizedDescription
+                self.errorMessage = message
+                LogService.shared.log("Backup fehlgeschlagen: \(message)", level: .error)
+            }
+            self.currentJob = nil
+            self.runTask = nil
+        }
     }
-    
+
     /// Sync abbrechen
     func cancelSync() {
-        status = .cancelled
-        currentJob = nil
+        syncEngine.cancel()
     }
-    
-    /// Status zurücksetzen
+
+    /// Status zurücksetzen (nur wenn kein Job läuft)
     func reset() {
+        guard runTask == nil else { return }
         status = .idle
         currentJob = nil
         overallProgress = 0.0
+        currentFile = nil
         errorMessage = nil
+        lastResult = nil
     }
 }
 
@@ -82,27 +132,21 @@ enum SyncStatus: Equatable {
 enum StorageLocation: Identifiable, Equatable {
     case local(URL)
     case smb(SMBConfig)
-    case ssh(SSHConfig)
-    case webdav(WebDAVConfig)
-    case cloud(CloudConfig)
-    
+    case ftp(FTPConfig)
+
     var id: String {
         switch self {
         case .local(let url): return url.absoluteString
         case .smb(let config): return config.id
-        case .ssh(let config): return config.id
-        case .webdav(let config): return config.id
-        case .cloud(let config): return config.id
+        case .ftp(let config): return config.id
         }
     }
-    
+
     var displayName: String {
         switch self {
         case .local(let url): return url.lastPathComponent
-        case .smb(let config): return config.name
-        case .ssh(let config): return config.name
-        case .webdav(let config): return config.name
-        case .cloud(let config): return config.name
+        case .smb(let config): return config.name.isEmpty ? config.host : config.name
+        case .ftp(let config): return config.name.isEmpty ? config.host : config.name
         }
     }
 }

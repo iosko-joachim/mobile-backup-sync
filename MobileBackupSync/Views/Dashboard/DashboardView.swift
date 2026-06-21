@@ -9,10 +9,12 @@ import SwiftUI
 
 struct DashboardView: View {
     @EnvironmentObject var appState: AppState
+    @AppStorage("compareByHash") private var compareByHash = false
+    @AppStorage("dryRun") private var dryRun = false
     @State private var showingSourcePicker = false
     @State private var showingDestinationPicker = false
     @State private var showingPreview = false
-    
+
     var body: some View {
         NavigationStack {
             Form {
@@ -106,14 +108,23 @@ struct DashboardView: View {
     private func startBackup() {
         guard let source = appState.selectedSource,
               let destination = appState.selectedDestination else { return }
-        
+
+        var options = SyncOptions()
+        options.compareByHash = compareByHash
+        options.dryRun = dryRun
+
+        let formatter = DateFormatter()
+        formatter.dateStyle = .short
+        formatter.timeStyle = .short
+
         let job = SyncJob(
-            name: "Backup \(Date())",
+            name: "Backup \(formatter.string(from: Date()))",
             source: source,
             destination: destination,
-            mode: .backup
+            mode: .backup,
+            options: options
         )
-        
+
         appState.startSync(job: job)
     }
 }

@@ -43,9 +43,7 @@ class LogService {
         }
         
         // File Logger
-        Task {
-            await fileLogger.write(entry)
-        }
+        fileLogger.write(entry)
     }
     
     /// Alle Einträge holen
@@ -72,6 +70,30 @@ class LogService {
     }
 }
 
+/// Log-Eintrag
+struct LogEntry: Identifiable {
+    let id = UUID()
+    let level: LogLevel
+    let message: String
+    let timestamp: Date
+
+    var formattedDate: String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .medium
+        return formatter.string(from: timestamp)
+    }
+}
+
+/// Log-Level
+enum LogLevel: String, CaseIterable {
+    case all = "Alle"
+    case error = "Fehler"
+    case warning = "Warnung"
+    case info = "Info"
+    case debug = "Debug"
+}
+
 /// Logger für Datei-Ausgabe
 private class FileLogger {
     
@@ -85,7 +107,7 @@ private class FileLogger {
         let paths = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
         guard let documents = paths.first else { return }
         
-        fileURL = documents.appendingPathComponent("NASBackup.log")
+        fileURL = documents.appendingPathComponent("MobileBackupSync.log")
     }
     
     func write(_ entry: LogEntry) {

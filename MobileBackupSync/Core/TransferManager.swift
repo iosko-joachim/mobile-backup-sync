@@ -7,16 +7,15 @@
 
 import Foundation
 
-/// Manager für Datei-Transfers
-class TransferManager {
-    
-    /// Abbruch-Signal
+/// Manager für Datei-Transfers. Arbeitet provider-agnostisch: jede Datei wird
+/// über eine temporäre lokale Datei von der Quelle zum Ziel kopiert (kein
+/// Vollständig-in-den-RAM-Laden), inklusive Retry-Logik.
+final class TransferManager {
+
     private var isCancelled = false
-    
-    /// Maximale Retry-Versuche
     private let maxRetries = 3
-    
-    /// Transfers ausführen
+
+    /// Transfers ausführen.
     func transfer(
         files: [PlannedFile],
         source: StorageLocation,
@@ -26,158 +25,107 @@ class TransferManager {
         onError: @escaping (SyncError) -> Void
     ) async throws -> SyncResult {
         isCancelled = false
-        
-        var transferredBytes: Int64 = 0
-        let totalBytes = files.reduce(0) { $0 + $1.file.size }
-        var errors: [SyncError] = []
-        var filesProcessed = 0
         let startTime = Date()
-        
-        for (index, plannedFile) in files.enumerated() {
+
+        let sourceProvider = source.makeProvider()
+        let destProvider = destination.makeProvider()
+        try await sourceProvider.connect()
+        defer { Task { await sourceProvider.disconnect() } }
+        try await destProvider.connect()
+        defer { Task { await destProvider.disconnect() } }
+
+        let totalBytes = files.reduce(Int64(0)) { $0 + ($1.action == .delete ? 0 : $1.file.size) }
+        var transferredBaseBytes: Int64 = 0
+        var filesProcessed = 0
+        var errors: [SyncError] = []
+
+        for planned in files {
             guard !isCancelled else {
-                return SyncResult(status: .cancelled, filesProcessed: filesProcessed)
+                return SyncResult(status: .cancelled, filesProcessed: filesProcessed,
+                                  errors: errors, duration: Date().timeIntervalSince(startTime))
             }
-            
-            // Skip delete actions for now (only for mirror mode)
-            if plannedFile.action == .delete {
-                filesProcessed += 1
-                continue
-            }
-            
+
             do {
-                // Retry-Logik
-                var lastError: Error?
-                for attempt in 1...maxRetries {
-                    do {
-                        try await transferFile(
-                            plannedFile: plannedFile,
-                            source: source,
-                            destination: destination,
-                            options: options,
-                            onProgress: { [weak self] progress in
-                                guard let self else { return }
-                                let fileProgress = Double(index) / Double(files.count)
-                                let currentFileProgress = progress / Double(files.count)
-                                let totalProgress = fileProgress + currentFileProgress
-                                
-                                let bytes = Int64(Double(totalBytes) * totalProgress)
-                                onProgress(ProgressUpdate(
-                                    progress: totalProgress,
-                                    currentFile: plannedFile.file.name,
-                                    transferredBytes: bytes,
-                                    totalBytes: totalBytes,
-                                    timestamp: Date()
-                                ))
-                            }
-                        )
-                        filesProcessed += 1
-                        break // Erfolg, keine weitere Retry
-                    } catch let error {
-                        lastError = error
-                        if attempt < maxRetries {
-                            // Kurze Pause vor Retry
-                            try await Task.sleep(nanoseconds: 500_000_000)
-                        }
+                switch planned.action {
+                case .delete:
+                    try await destProvider.delete(at: planned.file.relativePath)
+                case .conflict:
+                    // Konflikte erfordern manuelle Auflösung – hier überspringen.
+                    continue
+                case .copy, .update:
+                    let base = transferredBaseBytes
+                    try await transferOne(planned, source: sourceProvider, dest: destProvider) { fraction in
+                        let bytes = base + Int64(Double(planned.file.size) * fraction)
+                        let overall = totalBytes > 0 ? Double(bytes) / Double(totalBytes) : 0
+                        onProgress(ProgressUpdate(
+                            progress: min(1.0, overall),
+                            currentFile: planned.file.relativePath,
+                            transferredBytes: bytes,
+                            totalBytes: totalBytes,
+                            timestamp: Date()
+                        ))
                     }
+                    transferredBaseBytes += planned.file.size
                 }
-                
-                if let error = lastError {
-                    throw error
-                }
-                
-            } catch let syncError as SyncError {
-                errors.append(syncError)
-                onError(syncError)
+                filesProcessed += 1
+            } catch let error as SyncError {
+                errors.append(error)
+                onError(error)
             } catch {
                 let syncError = SyncError.transferFailed(error.localizedDescription)
                 errors.append(syncError)
                 onError(syncError)
             }
         }
-        
-        let duration = Date().timeIntervalSince(startTime)
-        
+
         return SyncResult(
-            status: errors.isEmpty ? .done : .failed("Einige Fehler aufgetreten"),
+            status: errors.isEmpty ? .done : .failed("Einige Dateien konnten nicht übertragen werden"),
             filesProcessed: filesProcessed,
             errors: errors,
-            duration: duration
+            duration: Date().timeIntervalSince(startTime)
         )
     }
-    
-    /// Einzelne Datei übertragen
-    private func transferFile(
-        plannedFile: PlannedFile,
-        source: StorageLocation,
-        destination: StorageLocation,
-        options: SyncOptions,
-        onProgress: @escaping (Double) -> Void
+
+    /// Eine Datei mit Retry übertragen (Download in Temp → Upload zum Ziel).
+    private func transferOne(
+        _ planned: PlannedFile,
+        source: StorageProvider,
+        dest: StorageProvider,
+        progress: @escaping (Double) -> Void
     ) async throws {
-        switch (source, destination) {
-        case (.local(let sourceURL), .smb(let smbConfig)):
-            // Lokal → SMB
-            try await transferLocalToSMB(
-                source: sourceURL,
-                config: smbConfig,
-                destinationPath: plannedFile.file.path,
-                onProgress: onProgress
-            )
-            
-        case (.smb(let smbConfig), .local(let destinationURL)):
-            // SMB → Lokal (Restore)
-            try await transferSMBToLocal(
-                sourcePath: plannedFile.file.path,
-                config: smbConfig,
-                destination: destinationURL,
-                onProgress: onProgress
-            )
-            
-        default:
-            // TODO: Andere Kombinationen
-            throw SyncError.transferFailed("Nicht unterstützte Transfer-Kombination")
+        let rel = planned.file.relativePath
+        var lastError: Error?
+
+        for attempt in 1...maxRetries {
+            guard !isCancelled else { throw SyncError.cancelled }
+
+            let temp = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            defer { try? FileManager.default.removeItem(at: temp) }
+
+            do {
+                try await source.download(at: rel, to: temp) { progress($0 * 0.5) }
+                try await dest.upload(from: temp, to: rel) { progress(0.5 + $0 * 0.5) }
+                // Zeitstempel der Quelle am Ziel erhalten -> stabiler inkrementeller
+                // Abgleich (sonst gilt jede Datei beim nächsten Lauf als geändert).
+                await dest.setModificationDate(planned.file.modifiedDate, at: rel)
+                return // Erfolg
+            } catch {
+                lastError = error
+                if attempt < maxRetries {
+                    // Verbindung könnte tot sein („broken pipe") -> vor dem nächsten
+                    // Versuch neu aufbauen.
+                    await source.disconnect()
+                    await dest.disconnect()
+                    try? await source.connect()
+                    try? await dest.connect()
+                    try? await Task.sleep(nanoseconds: 500_000_000)
+                }
+            }
         }
+
+        throw lastError ?? SyncError.transferFailed(rel)
     }
-    
-    /// Transfer: Lokal → SMB
-    private func transferLocalToSMB(
-        source: URL,
-        config: SMBConfig,
-        destinationPath: String,
-        onProgress: @escaping (Double) -> Void
-    ) async throws {
-        let provider = SMBStorageProvider(config: config)
-        try await provider.connect()
-        
-        // Datei lesen
-        let data = try Data(contentsOf: source)
-        
-        // Auf SMB schreiben
-        try await provider.writeFile(data: data, to: destinationPath, progress: onProgress)
-        
-        await provider.disconnect()
-    }
-    
-    /// Transfer: SMB → Lokal
-    private func transferSMBToLocal(
-        sourcePath: String,
-        config: SMBConfig,
-        destination: URL,
-        onProgress: @escaping (Double) -> Void
-    ) async throws {
-        let provider = SMBStorageProvider(config: config)
-        try await provider.connect()
-        
-        // Von SMB lesen
-        let data = try await provider.readFile(at: sourcePath)
-        
-        // Lokal schreiben
-        try data.write(to: destination)
-        onProgress(1.0)
-        
-        await provider.disconnect()
-    }
-    
-    /// Transfer abbrechen
+
     func cancel() {
         isCancelled = true
     }

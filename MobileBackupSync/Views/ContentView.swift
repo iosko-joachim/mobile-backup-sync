@@ -10,7 +10,7 @@ import SwiftUI
 struct ContentView: View {
     @EnvironmentObject var appState: AppState
     @State private var selectedTab = 0
-    
+
     var body: some View {
         TabView(selection: $selectedTab) {
             DashboardView()
@@ -18,19 +18,19 @@ struct ContentView: View {
                     Label("Backup", systemImage: "externaldrive")
                 }
                 .tag(0)
-            
-            CompareView()
-                .tabItem {
-                    Label("Vergleich", systemImage: "doc.text.magnifyingglass")
-                }
-                .tag(1)
-            
+
             JobsView()
                 .tabItem {
                     Label("Jobs", systemImage: "list.bullet")
                 }
+                .tag(1)
+
+            LogView()
+                .tabItem {
+                    Label("Protokoll", systemImage: "doc.text.magnifyingglass")
+                }
                 .tag(2)
-            
+
             SettingsView()
                 .tabItem {
                     Label("Einstellungen", systemImage: "gear")

@@ -9,8 +9,7 @@ import SwiftUI
 
 struct JobsView: View {
     @EnvironmentObject var appState: AppState
-    @State private var showingNewJob = false
-    
+
     var body: some View {
         NavigationStack {
             Group {
@@ -19,7 +18,7 @@ struct JobsView: View {
                         ContentUnavailableView(
                             "Keine Jobs",
                             systemImage: "list.bullet",
-                            description: Text("Erstelle einen neuen Backup-Job")
+                            description: Text("Starte ein Backup im Tab „Backup“.")
                         )
                     } else {
                         VStack(spacing: 16) {
@@ -28,7 +27,7 @@ struct JobsView: View {
                                 .foregroundColor(.secondary)
                             Text("Keine Jobs")
                                 .font(.headline)
-                            Text("Erstelle einen neuen Backup-Job")
+                            Text("Starte ein Backup im Tab „Backup“.")
                                 .font(.subheadline)
                                 .foregroundColor(.secondary)
                         }
@@ -43,16 +42,6 @@ struct JobsView: View {
                 }
             }
             .navigationTitle("Jobs")
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button(action: { showingNewJob = true }) {
-                        Image(systemName: "plus")
-                    }
-                }
-            }
-            .sheet(isPresented: $showingNewJob) {
-                NewJobView()
-            }
         }
     }
 }
@@ -80,44 +69,6 @@ struct JobRowView: View {
                     Text(lastRun, style: .relative)
                         .font(.caption)
                         .foregroundColor(.secondary)
-                }
-            }
-        }
-    }
-}
-
-/// Neuer Job erstellen
-struct NewJobView: View {
-    @Environment(\.dismiss) var dismiss
-    @State private var name = ""
-    @State private var mode: SyncMode = .backup
-    
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section("Name") {
-                    TextField("Job-Name", text: $name)
-                }
-                
-                Section("Modus") {
-                    Picker("Modus", selection: $mode) {
-                        ForEach(SyncMode.allCases, id: \.self) { mode in
-                            Text(mode.displayName).tag(mode)
-                        }
-                    }
-                    Text(mode.description)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            }
-            .navigationTitle("Neuer Job")
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Erstellen") {
-                        // TODO: Job speichern
-                        dismiss()
-                    }
-                    .disabled(name.isEmpty)
                 }
             }
         }
