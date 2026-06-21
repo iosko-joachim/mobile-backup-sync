@@ -465,6 +465,31 @@ gemeinsamen Schlüssel abgeglichen — genau die Grundlage für ein Zweispalter-
 >   (Go-GC), gomobile/Go-on-iOS-Toolchain-Pflege (arm64 Gerät + Simulator-Slices),
 >   OAuth-Glue über `ASWebAuthenticationSession`, Config/Tokens in Keychain.
 > - **Umgeht NICHT** Googles Restricted-Scope-Verifizierung für eine veröffentlichte App.
+>
+> **Deckt auch SMB & FTP ab.** rclone hat seit v1.61 ein **SMB-Backend** (SMB 2/3,
+> Signing/Encryption) und ein FTP-Backend — SMB jedoch über die reine Go-Lib
+> `go-smb2`, **nicht** über libsmb2. Heißt: librclone könnte den **kompletten**
+> Transport-Stack stellen (Local/SMB/FTP/Cloud) und sowohl das AMSMB2-Vendoring als
+> auch den eigenen FTP-Provider ersetzen. Caveat: `go-smb2` ≠ der erprobte
+> libsmb2-Pfad → FRITZ!Box/Signing **neu verifizieren**, bevor man konsolidiert (das
+> war der teuer gelöste Knackpunkt des Vorgängers).
+>
+> **Strategische Option — „rclone-Frontend" (ernsthaft prüfen).** *Credit where credit
+> is due:* wenn rclone die Transporte systematisch löst, sollten wir das nicht
+> ignorieren — es kann die Architektur bewusst kippen. Die App würde dann ein
+> **nativer iOS/iPad-Frontend über die rclone-Engine** (librclone in-App + `rclone rcd`
+> auf dem NAS, **dieselbe RC-API**), statt eigener Transport-Reimplementierungen.
+> - **Was wegfällt:** vendortes libsmb2, eigener FTP-Provider, jede Anbieter-OAuth/SDK,
+>   eigene Vergleichs-/Hash-/Retry-Mechanik — kommt alles aus rclone (breit gepflegt).
+> - **Was UNSER Mehrwert bleibt:** die native UX — v. a. die BeyondCompare-artige
+>   Vergleichs-/Merge-Ansicht (§2.6), Bedienung, Schweizer-freundliche Konfiguration,
+>   Steuerung **lokaler *und* headless** Läufe aus einer App.
+> - **Was sich NICHT ändert:** iOS-Hintergrund-Limits (in-App nur Vordergrund),
+>   Store-/Google-Verifizierung, Binärgröße/gomobile-Pflege. Und: rclone liefert
+>   `check`/Listing/Hashes, aber **kein** interaktives Merge — die BeyondCompare-Tiefe
+>   bleibt unsere UI-Schicht auf rclones Daten.
+> - **Nächster Schritt:** ein librclone-Spike (ein Cloud-Backend + ein echter SMB-Lauf
+>   gegen die FRITZ!Box), um die Konsolidierung zu validieren, bevor man sich festlegt.
 
 - [ ] `CloudStorageProvider` Basis-Interface (bzw. `RcloneProvider` bei Variante B)
 
@@ -993,3 +1018,4 @@ fließen immer durch den Mover (Egress-Kosten, API-Rate-Limits, Token-Verwahrung
 | 0.3 | 2026-06-21 | - | iOS-First Strategie, Android als spätere Phase |
 | 0.4 | 2026-06-21 | - | Gegencheck-Korrekturen, FTP/FTPS, iPad-Zweispalter (§2.6), Konzept Headless Protokoll-Konverter |
 | 0.5 | 2026-06-21 | - | Cloud-Umsetzungs-Entscheidung Einzel-SDKs vs. librclone-Embedding (§3.1) |
+| 0.6 | 2026-06-21 | - | rclone deckt auch SMB/FTP ab; strategische Option „rclone-Frontend" (§3.1) |
