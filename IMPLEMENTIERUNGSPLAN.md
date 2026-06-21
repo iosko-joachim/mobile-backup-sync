@@ -446,7 +446,27 @@ gemeinsamen Schlüssel abgeglichen — genau die Grundlage für ein Zweispalter-
 
 #### 3.1 Cloud-Provider Integration
 
-- [ ] `CloudStorageProvider` Basis-Interface
+> **Umsetzungs-Entscheidung — zwei Wege.** Vor dem Bau abwägen:
+>
+> **(A) Einzel-SDKs pro Anbieter** (wie unten gelistet): volle Kontrolle, native
+> Auth, aber je Anbieter mehrere Tage Arbeit + Pflege.
+>
+> **(B) `librclone`-Embedding** (Alternative, oft attraktiver): rclones Bibliotheks-API
+> (`RcloneRPC`, MIT) via `gomobile bind` → `Rclone.xcframework` → Swift-Bridge.
+> - **Gewinn:** ~70 Backends sofort (Drive, Dropbox, OneDrive, S3, WebDAV/Nextcloud …),
+>   ohne jeden OAuth/SDK selbst zu bauen; als `RcloneProvider` hinter das
+>   `StorageProvider`-Protokoll hängbar.
+> - **Symmetrie:** `librclone` (in-App) und `rclone rcd` (auf dem NAS, siehe Konzept
+>   „Headless Protokoll-Konverter") sprechen **dieselbe RC-API** → eine Bedienschicht,
+>   zwei Laufzeiten (lokal/Vordergrund vs. headless/24-7).
+> - **Hebt iOS-Hintergrund-Limits NICHT auf:** in-App-rclone taugt nur für
+>   Vordergrund-Transfers (Bildschirm wach), nicht für unbeaufsichtigten Dauerlauf.
+> - **Kosten/Risiken:** +30–50 MB Binär (per Build-Tags trimmbar), zweite Runtime
+>   (Go-GC), gomobile/Go-on-iOS-Toolchain-Pflege (arm64 Gerät + Simulator-Slices),
+>   OAuth-Glue über `ASWebAuthenticationSession`, Config/Tokens in Keychain.
+> - **Umgeht NICHT** Googles Restricted-Scope-Verifizierung für eine veröffentlichte App.
+
+- [ ] `CloudStorageProvider` Basis-Interface (bzw. `RcloneProvider` bei Variante B)
 
 - [ ] Google Drive
   - [ ] OAuth 2.0 Implementierung
@@ -972,3 +992,4 @@ fließen immer durch den Mover (Egress-Kosten, API-Rate-Limits, Token-Verwahrung
 | 0.2 | 2026-06-20 | - | Android-Unterstützung hinzugefügt, KMP-Architektur |
 | 0.3 | 2026-06-21 | - | iOS-First Strategie, Android als spätere Phase |
 | 0.4 | 2026-06-21 | - | Gegencheck-Korrekturen, FTP/FTPS, iPad-Zweispalter (§2.6), Konzept Headless Protokoll-Konverter |
+| 0.5 | 2026-06-21 | - | Cloud-Umsetzungs-Entscheidung Einzel-SDKs vs. librclone-Embedding (§3.1) |
