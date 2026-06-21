@@ -7,6 +7,7 @@
 
 import Foundation
 import Combine
+import UIKit
 
 /// Zentrale Anwendungsverwaltung. Spiegelt den Fortschritt der `SyncEngine`
 /// in die UI und verwaltet Auswahl sowie Job-Historie.
@@ -76,6 +77,10 @@ class AppState: ObservableObject {
 
         LogService.shared.log("Backup gestartet: \(job.name)", level: .info)
 
+        // Bildschirm während des Transfers wach halten — sperrt sich das Display,
+        // suspendiert iOS die App und der Lauf bricht ab.
+        UIApplication.shared.isIdleTimerDisabled = true
+
         runTask = Task { [weak self] in
             guard let self else { return }
             do {
@@ -95,6 +100,7 @@ class AppState: ObservableObject {
                 self.errorMessage = message
                 LogService.shared.log("Backup fehlgeschlagen: \(message)", level: .error)
             }
+            UIApplication.shared.isIdleTimerDisabled = false
             self.currentJob = nil
             self.runTask = nil
         }
